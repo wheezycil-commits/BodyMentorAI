@@ -1,0 +1,4428 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BodyMentorAI - AI Body Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.21.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/posenet@2.2.2"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #667eea, #764ba2);
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+      color: #333;
+      overflow-x: hidden;
+    }
+
+    /* Splash Screen */
+    #splashScreen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #2c3e50, #4a235a);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 9999;
+      transition: opacity 0.5s ease;
+    }
+
+    .logo-container {
+      text-align: center;
+      animation: pulse 2s infinite, float 3s ease-in-out infinite;
+    }
+
+    .logo {
+      font-size: 5em;
+      font-weight: bold;
+      background: linear-gradient(45deg, #3498db, #e74c3c, #f1c40f, #2ecc71);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 20px;
+      text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    }
+
+    .tagline {
+      color: white;
+      font-size: 1.2em;
+      opacity: 0.9;
+      margin-top: 10px;
+    }
+
+    .loading-dots {
+      display: flex;
+      margin-top: 30px;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      background: white;
+      margin: 0 5px;
+      animation: bounce 1.5s infinite ease-in-out;
+    }
+
+    .dot:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    .dot:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+
+    @keyframes float {
+      0% { transform: translateY(0px); }
+      50% { transform: translateY(-10px); }
+      100% { transform: translateY(0px); }
+    }
+
+    @keyframes bounce {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+
+    /* Main App Container */
+    .container {
+      max-width: 1200px;
+      margin: auto;
+      background: #fff;
+      border-radius: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.8s ease, transform 0.8s ease;
+    }
+
+    .container.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    header {
+      background: linear-gradient(135deg, #2c3e50, #4a235a);
+      color: #fff;
+      padding: 30px;
+      text-align: center;
+      position: relative;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 5px;
+      background: linear-gradient(90deg, #3498db, #e74c3c, #f1c40f, #2ecc71);
+    }
+
+    h1 {
+      font-size: 2.5em;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    }
+
+    .subtitle {
+      font-size: 1.2em;
+      opacity: 0.9;
+    }
+
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 30px;
+      padding: 40px;
+    }
+
+    @media (max-width: 768px) {
+      .main-content {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .upload-section, .result-section {
+      background: #f8f9fa;
+      padding: 30px;
+      border-radius: 15px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+
+    /* Login Modal */
+    .login-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10001;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .login-container {
+      background: white;
+      padding: 40px;
+      border-radius: 15px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+      width: 90%;
+      max-width: 400px;
+      text-align: center;
+    }
+
+    .login-container h2 {
+      color: #2c3e50;
+      margin-bottom: 30px;
+      font-size: 1.8em;
+    }
+
+    .login-input-group {
+      margin-bottom: 20px;
+      text-align: left;
+    }
+
+    .login-input-group label {
+      display: block;
+      margin-bottom: 8px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    .login-input {
+      width: 100%;
+      padding: 12px 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+    }
+
+    .login-input:focus {
+      border-color: #3498db;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+      outline: none;
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 14px;
+      background: linear-gradient(135deg, #3498db, #2980b9);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      margin-top: 10px;
+    }
+
+    .login-btn:hover {
+      background: linear-gradient(135deg, #2980b9, #21618c);
+      transform: translateY(-2px);
+    }
+
+    .login-error {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 15px 0;
+      display: none;
+      border-left: 4px solid #dc3545;
+    }
+
+    .admin-btn {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: linear-gradient(135deg, #2c3e50, #4a235a);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: 600;
+      z-index: 100;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .admin-btn:hover {
+      background: linear-gradient(135deg, #4a235a, #2c3e50);
+      transform: translateY(-2px);
+    }
+
+    .admin-panel {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.9);
+      z-index: 10002;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .admin-content {
+      background: white;
+      padding: 30px;
+      border-radius: 15px;
+      max-width: 1200px;
+      margin: 40px auto;
+      position: relative;
+    }
+
+    .close-admin {
+      position: absolute;
+      top: 15px;
+      right: 15px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .admin-tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .admin-tab {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #7f8c8d;
+      transition: all 0.3s ease;
+    }
+
+    .admin-tab.active {
+      color: #3498db;
+      border-bottom-color: #3498db;
+    }
+
+    .admin-tab-content {
+      display: none;
+    }
+
+    .admin-tab-content.active {
+      display: block;
+    }
+
+    .user-progress-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .user-progress-card {
+      background: #f8f9fa;
+      border-radius: 10px;
+      padding: 20px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      border-left: 4px solid #3498db;
+    }
+
+    .user-avatar {
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #3498db, #9b59b6);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0 auto 15px;
+    }
+
+    .progress-chart-container {
+      height: 200px;
+      margin: 20px 0;
+      position: relative;
+    }
+
+    .progress-stats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .stat-item {
+      background: white;
+      padding: 10px;
+      border-radius: 8px;
+      text-align: center;
+      box-shadow: 0 3px 6px rgba(0,0,0,0.1);
+    }
+
+    .stat-value {
+      font-weight: bold;
+      color: #2c3e50;
+      font-size: 1.2em;
+    }
+
+    .stat-label {
+      font-size: 0.8em;
+      color: #7f8c8d;
+    }
+
+    .progress-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.8em;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    .badge-improving {
+      background: #27ae60;
+      color: white;
+    }
+
+    .badge-declining {
+      background: #e74c3c;
+      color: white;
+    }
+
+    .badge-stable {
+      background: #f39c12;
+      color: white;
+    }
+
+    .no-progress-data {
+      text-align: center;
+      padding: 40px;
+      color: #7f8c8d;
+      grid-column: 1 / -1;
+    }
+
+    .session-history {
+      max-height: 200px;
+      overflow-y: auto;
+      margin-top: 20px;
+    }
+
+    .session-item {
+      background: white;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 8px;
+      border-left: 3px solid #3498db;
+    }
+
+    .session-date {
+      font-weight: bold;
+      color: #2c3e50;
+      font-size: 0.9em;
+    }
+
+    .session-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+      margin-top: 5px;
+      font-size: 0.8em;
+    }
+
+    .admin-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #e0e0e0;
+      flex-wrap: wrap;
+    }
+
+    .face-recognition-status {
+      background: #d4edda;
+      color: #155724;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+      border-left: 4px solid #28a745;
+      display: none;
+    }
+
+    .user-identified {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+    }
+
+    .update-progress-form {
+      background: #e8f4fc;
+      padding: 20px;
+      border-radius: 10px;
+      margin-top: 20px;
+      border-left: 4px solid #3498db;
+      display: none;
+    }
+
+    .progress-update-btn {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: white;
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      margin-top: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .progress-update-btn:hover {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+    }
+
+    .profile-summary {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      background: #f8f9fa;
+      padding: 20px;
+      border-radius: 10px;
+      margin-bottom: 20px;
+    }
+
+    .profile-info h3 {
+      margin-bottom: 5px;
+      color: #2c3e50;
+    }
+
+    .profile-info p {
+      margin-bottom: 3px;
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      margin-bottom: 20px;
+      color: #2c3e50;
+    }
+
+    .section-icon {
+      font-size: 1.5em;
+      margin-right: 10px;
+    }
+
+    .user-data-form {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      margin-bottom: 20px;
+      border-left: 4px solid #3498db;
+    }
+
+    .form-group {
+      margin-bottom: 15px;
+    }
+
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 5px;
+      font-weight: 600;
+      color: #2c3e50;
+    }
+
+    .input-with-unit {
+      position: relative;
+    }
+
+    input[type="number"],
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 15px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      transition: all 0.3s ease;
+    }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus {
+      border-color: #3498db;
+      box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+      outline: none;
+    }
+
+    .unit {
+      position: absolute;
+      right: 15px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #7f8c8d;
+      font-weight: 500;
+    }
+
+    .gender-selection {
+      display: flex;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .gender-option {
+      flex: 1;
+      text-align: center;
+    }
+
+    .gender-btn {
+      width: 100%;
+      padding: 12px;
+      background: #f8f9fa;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      font-weight: 500;
+    }
+
+    .gender-btn:hover {
+      background: #e9ecef;
+    }
+
+    .gender-btn.active {
+      background: #3498db;
+      color: white;
+      border-color: #3498db;
+    }
+
+    .camera-preview {
+      width: 100%;
+      height: 400px;
+      background: #f0f0f0;
+      border-radius: 10px;
+      overflow: hidden;
+      margin-bottom: 20px;
+      position: relative;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      border: 2px dashed #ddd;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #userCanvas, #cameraCanvas {
+      max-width: 100%;
+      max-height: 100%;
+      display: none;
+    }
+
+    #cameraVideo {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+      transform: scaleX(-1);
+    }
+
+    .placeholder-text {
+      text-align: center;
+      color: #666;
+    }
+
+    .placeholder-text .icon {
+      font-size: 4em;
+      margin-bottom: 10px;
+    }
+
+    .controls {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      padding: 12px 24px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+
+    .primary-btn {
+      background: linear-gradient(135deg, #3498db, #2980b9);
+      color: white;
+    }
+
+    .primary-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #2980b9, #21618c);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    .secondary-btn {
+      background: linear-gradient(135deg, #95a5a6, #7f8c8d);
+      color: white;
+    }
+
+    .secondary-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #7f8c8d, #6c7b7d);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    .success-btn {
+      background: linear-gradient(135deg, #27ae60, #219a52);
+      color: white;
+    }
+
+    .success-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #219a52, #1e8449);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    .warning-btn {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: white;
+    }
+
+    .warning-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    .danger-btn {
+      background: linear-gradient(135deg, #e74c3c, #c0392b);
+      color: white;
+    }
+
+    .danger-btn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #c0392b, #a93226);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+    }
+
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .ideal-reference {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e8f4fc;
+      border-radius: 10px;
+      border-left: 4px solid #3498db;
+    }
+
+    .ideal-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px;
+      margin-top: 10px;
+    }
+
+    .ideal-image {
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      position: relative;
+    }
+
+    .ideal-image img {
+      width: 100%;
+      height: 150px;
+      object-fit: cover;
+      display: block;
+    }
+
+    .ideal-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.7);
+      color: white;
+      padding: 5px;
+      text-align: center;
+      font-size: 0.8em;
+    }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .metric-card {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      text-align: center;
+      transition: all 0.3s ease;
+      border-left: 4px solid #3498db;
+    }
+
+    .metric-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+    }
+
+    .metric-value {
+      font-size: 2em;
+      font-weight: bold;
+      color: #2c3e50;
+      margin: 10px 0;
+    }
+
+    .metric-label {
+      color: #7f8c8d;
+      font-size: 0.9em;
+    }
+
+    .progress-bar {
+      height: 8px;
+      background: #ecf0f1;
+      border-radius: 4px;
+      margin: 10px 0;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.5s ease;
+    }
+
+    .fat-progress {
+      background: linear-gradient(90deg, #27ae60, #f1c40f, #e74c3c);
+    }
+
+    .ratio-progress {
+      background: linear-gradient(90deg, #3498db, #9b59b6);
+    }
+
+    .comparison-result {
+      background: #e8f6f3;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 15px;
+      border-left: 4px solid #27ae60;
+    }
+
+    .comparison-bar {
+      height: 20px;
+      background: #ecf0f1;
+      border-radius: 10px;
+      margin: 10px 0;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .comparison-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #27ae60, #2ecc71);
+      border-radius: 10px;
+      transition: width 0.5s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 0.8em;
+      font-weight: bold;
+    }
+
+    .loading {
+      display: none;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .spinner {
+      border: 4px solid #f3f3f3;
+      border-top: 4px solid #3498db;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .instructions {
+      background: #fff3cd;
+      border-left: 4px solid #ffc107;
+      padding: 15px;
+      margin: 20px 0;
+      border-radius: 5px;
+    }
+
+    .instructions h3 {
+      color: #856404;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+    }
+
+    .instructions ul {
+      padding-left: 20px;
+    }
+
+    .instructions li {
+      margin-bottom: 5px;
+      color: #856404;
+    }
+
+    .footer {
+      text-align: center;
+      padding: 20px;
+      background: #2c3e50;
+      color: white;
+      margin-top: 20px;
+    }
+
+    .feature-badge {
+      display: inline-block;
+      background: linear-gradient(135deg, #e74c3c, #c0392b);
+      color: white;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 0.8em;
+      margin-left: 10px;
+      font-weight: bold;
+    }
+
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+
+    .error-message {
+      background: #f8d7da;
+      color: #721c24;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+      border-left: 4px solid #dc3545;
+      display: none;
+    }
+
+    .keypoint-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+    }
+
+    .body-type-info {
+      background: #e8f4fc;
+      border-radius: 10px;
+      padding: 15px;
+      margin-top: 15px;
+      border-left: 4px solid #3498db;
+    }
+
+    .fat-indicator {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+      font-size: 0.8em;
+      color: #7f8c8d;
+    }
+
+    .camera-controls {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+      justify-content: center;
+    }
+
+    .camera-status {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 0.9em;
+      color: #666;
+    }
+
+    .bmi-indicator {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 5px;
+      font-size: 0.8em;
+      color: #7f8c8d;
+    }
+
+    .camera-permission-info {
+      background: #d1ecf1;
+      border-left: 4px solid #17a2b8;
+      padding: 15px;
+      margin: 10px 0;
+      border-radius: 5px;
+      display: none;
+    }
+
+    .camera-permission-info h4 {
+      color: #0c5460;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+    }
+
+    /* New Styles for Food and Exercise Recommendations */
+    .recommendation-tabs {
+      display: flex;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #e0e0e0;
+    }
+
+    .tab-btn {
+      padding: 12px 24px;
+      background: none;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      color: #7f8c8d;
+      transition: all 0.3s ease;
+    }
+
+    .tab-btn.active {
+      color: #3498db;
+      border-bottom-color: #3498db;
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    .food-grid, .exercise-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .food-card, .exercise-card {
+      background: white;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+      transition: transform 0.3s ease;
+    }
+
+    .food-card:hover, .exercise-card:hover {
+      transform: translateY(-5px);
+    }
+
+    .food-image, .exercise-video {
+      width: 100%;
+      height: 200px;
+      object-fit: cover;
+    }
+
+    .food-content, .exercise-content {
+      padding: 20px;
+    }
+
+    .food-title, .exercise-title {
+      font-size: 1.2em;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: #2c3e50;
+    }
+
+    .food-description, .exercise-description {
+      color: #7f8c8d;
+      margin-bottom: 15px;
+    }
+
+    .food-benefits, .exercise-steps {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+
+    .food-benefits h4, .exercise-steps h4 {
+      color: #2c3e50;
+      margin-bottom: 8px;
+    }
+
+    .food-benefits ul, .exercise-steps ul {
+      padding-left: 20px;
+      color: #7f8c8d;
+    }
+
+    .food-benefits li, .exercise-steps li {
+      margin-bottom: 5px;
+    }
+
+    .video-container {
+      position: relative;
+      width: 100%;
+      height: 0;
+      padding-bottom: 56.25%;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 15px;
+    }
+
+    .video-container iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .nutrition-info {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-top: 15px;
+      text-align: center;
+    }
+
+    .nutrition-item {
+      background: #e8f4fc;
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    .nutrition-value {
+      font-weight: bold;
+      color: #3498db;
+      font-size: 1.1em;
+    }
+
+    .nutrition-label {
+      font-size: 0.8em;
+      color: #7f8c8d;
+    }
+
+    .preview-image {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: none;
+    }
+
+    .pose-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 10px;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.7);
+      padding: 8px;
+      border-radius: 5px;
+      color: white;
+      font-size: 12px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-color {
+      width: 12px;
+      height: 4px;
+      border-radius: 2px;
+    }
+
+    .goal-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 20px;
+      font-size: 0.8em;
+      font-weight: bold;
+      margin-left: 10px;
+    }
+
+    .goal-underweight {
+      background: #3498db;
+      color: white;
+    }
+
+    .goal-normal {
+      background: #27ae60;
+      color: white;
+    }
+
+    .goal-overweight {
+      background: #e74c3c;
+      color: white;
+    }
+
+    /* Download Section */
+    .download-section {
+      text-align: center;
+      margin-top: 30px;
+      padding: 20px;
+      background: #f8f9fa;
+      border-radius: 10px;
+      border-left: 4px solid #27ae60;
+    }
+
+    .download-btn {
+      background: linear-gradient(135deg, #27ae60, #219a52);
+      color: white;
+      padding: 15px 30px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(39, 174, 96, 0.3);
+    }
+
+    .download-btn:hover {
+      background: linear-gradient(135deg, #219a52, #1e8449);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(39, 174, 96, 0.4);
+    }
+
+    .download-btn:disabled {
+      background: #95a5a6;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .pdf-preview {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 10000;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .pdf-preview-content {
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      max-width: 90%;
+      max-height: 90%;
+      overflow: auto;
+    }
+
+    .pdf-preview-content img {
+      max-width: 100%;
+      height: auto;
+    }
+
+    .close-preview {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: #e74c3c;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 40px;
+      height: 40px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+
+    .download-loading {
+      display: none;
+      text-align: center;
+      padding: 10px;
+    }
+
+    .download-spinner {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #3498db;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    /* Reset Button Styles */
+    .reset-section {
+      text-align: center;
+      margin-top: 20px;
+      padding: 15px;
+      background: #fef5e7;
+      border-radius: 10px;
+      border-left: 4px solid #f39c12;
+    }
+
+    .reset-btn {
+      background: linear-gradient(135deg, #f39c12, #e67e22);
+      color: white;
+      padding: 12px 25px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      box-shadow: 0 4px 12px rgba(243, 156, 18, 0.3);
+    }
+
+    .reset-btn:hover {
+      background: linear-gradient(135deg, #e67e22, #d35400);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(243, 156, 18, 0.4);
+    }
+
+    /* IMT Explanation */
+    .imt-explanation {
+      background: #e8f4fc;
+      border-radius: 10px;
+      padding: 20px;
+      margin-top: 20px;
+      border-left: 4px solid #3498db;
+      display: none;
+    }
+
+    .imt-formula {
+      background: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+      text-align: center;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+      font-family: 'Courier New', monospace;
+      font-size: 1.1em;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+
+    .imt-categories {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    .imt-category {
+      padding: 12px;
+      border-radius: 5px;
+      text-align: center;
+      font-weight: 600;
+      color: white;
+      font-size: 0.9em;
+    }
+
+    .imt-underweight {
+      background: #3498db;
+    }
+
+    .imt-normal {
+      background: #27ae60;
+    }
+
+    .imt-overweight {
+      background: #f39c12;
+    }
+
+    .imt-obese {
+      background: #e74c3c;
+    }
+
+    .calculation-steps {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 15px 0;
+      color: #2c3e50;
+    }
+
+    .calculation-step {
+      margin-bottom: 10px;
+      padding-left: 20px;
+      position: relative;
+      font-size: 0.95em;
+    }
+
+    .calculation-step:before {
+      content: "➔";
+      position: absolute;
+      left: 0;
+      color: #3498db;
+    }
+
+    .step-number {
+      font-weight: bold;
+      color: #3498db;
+    }
+
+    .step-value {
+      font-weight: bold;
+      color: #2c3e50;
+    }
+
+    .imt-result {
+      font-size: 1.2em;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 15px;
+      padding: 10px;
+      background: #e8f6f3;
+      border-radius: 8px;
+      color: #27ae60;
+    }
+
+    /* Download Status */
+    .download-status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 0.9em;
+      display: none;
+    }
+
+    .download-success {
+      background: #d4edda;
+      color: #155724;
+      border-left: 4px solid #28a745;
+    }
+
+    .download-error {
+      background: #f8d7da;
+      color: #721c24;
+      border-left: 4px solid #dc3545;
+    }
+
+    /* New Styles for Food Meta */
+    .food-meta {
+      display: flex;
+      justify-content: space-between;
+      margin: 10px 0;
+      padding: 8px;
+      background: #e8f4fc;
+      border-radius: 5px;
+      font-size: 0.9em;
+    }
+
+    .food-tips {
+      background: #fff3cd;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      border-left: 3px solid #ffc107;
+      font-size: 0.9em;
+    }
+
+    .food-tips strong {
+      color: #856404;
+    }
+
+    .exercise-meta {
+      display: flex;
+      justify-content: space-between;
+      margin: 15px 0;
+      padding: 10px;
+      background: #f8f9fa;
+      border-radius: 8px;
+    }
+
+    .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 0.9em;
+      color: #2c3e50;
+    }
+
+    /* Quick Download Options */
+    .quick-download-options {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-top: 15px;
+      flex-wrap: wrap;
+    }
+
+    .quick-download-btn {
+      background: linear-gradient(135deg, #3498db, #2980b9);
+      color: white;
+      padding: 12px 25px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      transition: all 0.3s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .quick-download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    }
+
+    /* Success Message */
+    .success-message {
+      background: #d4edda;
+      color: #155724;
+      padding: 10px;
+      border-radius: 5px;
+      margin: 10px 0;
+      border-left: 4px solid #28a745;
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Modal -->
+  <div class="login-modal" id="loginModal">
+    <div class="login-container">
+      <h2>Login Admin</h2>
+      <div class="login-error" id="loginError"></div>
+      <div class="login-input-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" class="login-input" placeholder="Masukkan username">
+      </div>
+      <div class="login-input-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" class="login-input" placeholder="Masukkan password">
+      </div>
+      <button class="login-btn" onclick="loginAdmin()">Login</button>
+      <button class="secondary-btn" style="width: 100%; margin-top: 10px;" onclick="closeLoginModal()">Batal</button>
+    </div>
+  </div>
+
+  <!-- Admin Panel -->
+  <div class="admin-panel" id="adminPanel">
+    <div class="admin-content">
+      <button class="close-admin" onclick="closeAdminPanel()">×</button>
+      <h2>Admin Panel - BodyMentorAI</h2>
+      
+      <div class="admin-tabs">
+        <button class="admin-tab active" data-tab="progress">Progres Pengguna</button>
+        <button class="admin-tab" data-tab="analytics">Analitik</button>
+        <button class="admin-tab" data-tab="system">Sistem</button>
+      </div>
+
+      <div class="admin-tab-content active" id="progress-tab">
+        <h3>📈 Progres Pengguna</h3>
+        <div id="userProgressGrid" class="user-progress-grid">
+          <!-- Progress pengguna akan ditampilkan di sini -->
+        </div>
+      </div>
+
+      <div class="admin-tab-content" id="analytics-tab">
+        <h3>📊 Analitik Sistem</h3>
+        <div class="analytics-stats">
+          <div class="stat-card" style="grid-column: span 2;">
+            <canvas id="systemAnalyticsChart" height="300"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="admin-tab-content" id="system-tab">
+        <h3>⚙️ Pengaturan Sistem</h3>
+        <div class="admin-controls">
+          <button class="danger-btn" onclick="clearAllData()">
+            <span>🗑️</span> Hapus Semua Data
+          </button>
+          <button class="warning-btn" onclick="exportData()">
+            <span>📤</span> Export Data
+          </button>
+          <button class="primary-btn" onclick="backupData()">
+            <span>💾</span> Backup Data
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Splash Screen -->
+  <div id="splashScreen">
+    <div class="logo-container">
+      <div class="logo">BodyMentorAI</div>
+      <p class="tagline">AI Body Analyzer</p>
+      <div class="loading-dots">
+        <div class="dot"></div>
+        <div class="dot"></div>
+        <div class="dot"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main App Container -->
+  <div class="container" id="mainApp">
+    <header>
+      <button class="admin-btn" onclick="showLoginModal()">Admin Login</button>
+      <h1>BodyMentor AI</h1>
+      <p class="subtitle">AI Body Analyzer - Analisis Bentuk Tubuh & Kadar Lemak</p>
+    </header>
+
+    <div class="face-recognition-status" id="faceRecognitionStatus">
+      <span>👤 Pengguna dikenali! Menampilkan progres terakhir...</span>
+    </div>
+
+    <div class="main-content">
+      <!-- Upload Section -->
+      <div class="upload-section">
+        <h2 class="section-title">
+          <span class="section-icon">📷</span>
+          Upload Foto atau Gunakan Kamera
+          <span class="feature-badge pulse">ANALISIS AKURAT</span>
+        </h2>
+        
+        <!-- Form Input Berat & Tinggi Badan -->
+        <div class="user-data-form">
+          <h3 class="section-title">
+            <span class="section-icon">📊</span>
+            Data Pribadi Anda
+          </h3>
+          
+          <div class="form-row">
+            <div class="form-group">
+              <label for="weightInput">Berat Badan</label>
+              <div class="input-with-unit">
+                <input type="number" id="weightInput" placeholder="70" min="30" max="200" step="0.1" value="70">
+                <span class="unit">kg</span>
+              </div>
+            </div>
+            
+            <div class="form-group">
+              <label for="heightInput">Tinggi Badan</label>
+              <div class="input-with-unit">
+                <input type="number" id="heightInput" placeholder="170" min="100" max="250" step="0.1" value="170">
+                <span class="unit">cm</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label>Jenis Kelamin</label>
+            <div class="gender-selection">
+              <div class="gender-option">
+                <button type="button" class="gender-btn active" data-gender="male">Pria</button>
+              </div>
+              <div class="gender-option">
+                <button type="button" class="gender-btn" data-gender="female">Wanita</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <label for="ageInput">Usia</label>
+            <div class="input-with-unit">
+              <input type="number" id="ageInput" placeholder="25" min="15" max="80" value="25">
+              <span class="unit">tahun</span>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="userName">Nama Pengguna (Opsional)</label>
+            <div class="input-with-unit">
+              <input type="text" id="userName" placeholder="Masukkan nama Anda">
+            </div>
+          </div>
+        </div>
+
+        <!-- Profile Summary -->
+        <div class="profile-summary" id="profileSummary" style="display: none;">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <div class="profile-info">
+            <h3 id="profileName">Nama Pengguna</h3>
+            <p id="profileLastSession">Sesi terakhir: -</p>
+            <p id="profileProgress">Progres: -</p>
+          </div>
+        </div>
+
+        <div class="camera-permission-info" id="cameraPermissionInfo">
+          <h4><span class="section-icon">ℹ️</span> Informasi Akses Kamera</h4>
+          <p>Pastikan Anda mengizinkan akses kamera ketika diminta oleh browser.</p>
+        </div>
+
+        <div class="instructions">
+          <h3><span class="section-icon">📋</span> Petunjuk Pengambilan Foto:</h3>
+          <ul>
+            <li>Gunakan pakaian yang menunjukkan bentuk tubuh</li>
+            <li>Berdiri tegak dengan posisi natural menghadap kamera</li>
+            <li>Rentangkan tangan sedikit dari tubuh</li>
+            <li>Pastikan seluruh tubuh terlihat dalam frame</li>
+            <li>Gunakan pencahayaan yang baik dan merata</li>
+          </ul>
+        </div>
+
+        <div class="camera-preview">
+          <canvas id="userCanvas"></canvas>
+          <canvas id="cameraCanvas"></canvas>
+          <video id="cameraVideo" autoplay playsinline></video>
+          <img id="previewImage" class="preview-image" alt="Preview Gambar">
+          <canvas id="keypointCanvas" class="keypoint-canvas"></canvas>
+          <div class="placeholder-text" id="placeholderText">
+            <div class="icon">📷</div>
+            <p>Gambar akan muncul di sini setelah diupload atau dari kamera</p>
+          </div>
+        </div>
+
+        <div class="error-message" id="errorMessage"></div>
+
+        <div class="controls">
+          <input type="file" id="fileInput" accept="image/*" style="display: none;">
+          <button class="primary-btn" onclick="document.getElementById('fileInput').click()">
+            <span>📁</span> Pilih Foto
+          </button>
+          <button class="warning-btn" id="cameraBtn">
+            <span>📷</span> Buka Kamera
+          </button>
+          <button class="success-btn" id="analyzeBtn">
+            <span>🔍</span> Analisis dengan AI
+          </button>
+          <button class="danger-btn" id="resetBtn" style="display: none;">
+            <span>🔄</span> Reset AI
+          </button>
+        </div>
+
+        <!-- Update Progress Button -->
+        <div class="update-progress-form" id="updateProgressForm">
+          <h4><span class="section-icon">📈</span> Update Progres Latihan</h4>
+          <p>Update berat dan tinggi badan Anda untuk melihat progres latihan:</p>
+          <button class="progress-update-btn" onclick="showUpdateProgressForm()">
+            <span>⚡</span> Update Progres
+          </button>
+        </div>
+
+        <div class="camera-controls" id="cameraControls" style="display: none;">
+          <button class="primary-btn" id="captureBtn">
+            <span>⭕</span> Ambil Foto
+          </button>
+          <button class="secondary-btn" id="closeCameraBtn">
+            <span>❌</span> Tutup Kamera
+          </button>
+        </div>
+
+        <div class="camera-status" id="cameraStatus"></div>
+
+        <div class="ideal-reference">
+          <h3 class="section-title">
+            <span class="section-icon">⭐</span>
+            Referensi Bentuk Badan Ideal
+          </h3>
+          <p>AI akan menganalisis bentuk tubuh dan memperkirakan kadar lemak berdasarkan proporsi:</p>
+          
+          <div class="ideal-images">
+            <div class="ideal-image">
+              <img id="idealMale" alt="Pria Ideal" />
+              <div class="ideal-label">Pria - Proporsi Ideal</div>
+            </div>
+            <div class="ideal-image">
+              <img id="idealFemale" alt="Wanita Ideal" />
+              <div class="ideal-label">Wanita - Proporsi Ideal</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Result Section -->
+      <div class="result-section">
+        <h2 class="section-title">
+          <span class="section-icon">📊</span>
+          Hasil Analisis
+        </h2>
+        <p>Analisis bentuk tubuh dan estimasi kadar lemak akan muncul di sini</p>
+
+        <div class="loading" id="loadingIndicator">
+          <div class="spinner"></div>
+          <p>AI sedang menganalisis bentuk tubuh dan kadar lemak...</p>
+          <p id="loadingDetail">Mendeteksi pose tubuh...</p>
+        </div>
+
+        <div id="results" style="display: none;">
+          <div class="body-shape">
+            <div class="shape-icon" id="bodyShapeIcon">⚪</div>
+            <h3 id="bodyShapeText">Bentuk Tubuh</h3>
+            <p id="bodyShapeDesc">Deskripsi bentuk tubuh</p>
+          </div>
+
+          <!-- Proporsi Analysis -->
+          <div class="comparison-result">
+            <h4><span class="section-icon">📏</span> Analisis Proporsi Tubuh</h4>
+            <div id="proportionDetails">
+              <!-- Detail proporsi akan diisi oleh JavaScript -->
+            </div>
+            <p id="matchDescription">Analisis proporsi berdasarkan rasio bahu, pinggang, dan pinggul</p>
+          </div>
+
+          <div class="result-grid">
+            <div class="metric-card">
+              <div class="metric-label">Indeks Massa Tubuh (BMI)</div>
+              <div class="metric-value" id="bmiValue">0.0</div>
+              <div class="progress-bar">
+                <div class="progress-fill ratio-progress" id="bmiProgress" style="width: 0%"></div>
+              </div>
+              <div class="bmi-indicator">
+                <span>Kurus</span>
+                <span>Normal</span>
+                <span>Gemuk</span>
+              </div>
+              <div class="metric-label" id="bmiCategory">Kategori</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Estimasi Kadar Lemak</div>
+              <div class="metric-value" id="fatPercentage">0%</div>
+              <div class="progress-bar">
+                <div class="progress-fill fat-progress" id="fatProgress" style="width: 0%"></div>
+              </div>
+              <div class="fat-indicator">
+                <span>Rendah</span>
+                <span>Normal</span>
+                <span>Tinggi</span>
+              </div>
+              <div class="metric-label" id="fatCategory">Kategori</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Rasio Pinggang-Pinggul</div>
+              <div class="metric-value" id="whRatio">0.00</div>
+              <div class="progress-bar">
+                <div class="progress-fill ratio-progress" id="ratioProgress" style="width: 0%"></div>
+              </div>
+              <div class="metric-label" id="ratioCategory">Kategori</div>
+            </div>
+
+            <div class="metric-card">
+              <div class="metric-label">Berat Badan Ideal</div>
+              <div class="metric-value" id="idealWeight">0 kg</div>
+              <div class="progress-bar">
+                <div class="progress-fill ratio-progress" id="weightProgress" style="width: 0%"></div>
+              </div>
+              <div class="metric-label" id="weightStatus">Status</div>
+            </div>
+          </div>
+
+          <!-- IMT Calculation Section -->
+          <div class="imt-explanation" id="imtExplanation">
+            <h4><span class="section-icon">🧮</span> Perhitungan Indeks Massa Tubuh (IMT)</h4>
+            
+            <div class="imt-formula" id="imtFormula">
+              IMT = Berat (kg) ÷ (Tinggi (m) × Tinggi (m))
+            </div>
+            
+            <div class="calculation-steps">
+              <div class="calculation-step">
+                <span class="step-number">1.</span> Tinggi Badan: <span class="step-value" id="calcHeight">170</span> cm = 
+                <span class="step-value" id="calcHeightMeters">1.70</span> m
+              </div>
+              <div class="calculation-step">
+                <span class="step-number">2.</span> Tinggi kuadrat: <span class="step-value" id="calcHeightMeters2">1.70</span> m × 
+                <span class="step-value" id="calcHeightMeters2b">1.70</span> m = 
+                <span class="step-value" id="calcHeightSquared">2.89</span> m²
+              </div>
+              <div class="calculation-step">
+                <span class="step-number">3.</span> Berat Badan: <span class="step-value" id="calcWeight">70</span> kg
+              </div>
+              <div class="calculation-step">
+                <span class="step-number">4.</span> IMT = <span class="step-value" id="calcWeight2">70</span> kg ÷ 
+                <span class="step-value" id="calcHeightSquared2">2.89</span> m² = 
+                <span class="step-value" id="finalIMT">24.2</span>
+              </div>
+            </div>
+            
+            <div class="imt-categories">
+              <div class="imt-category imt-underweight">Kurus (< 18.5)</div>
+              <div class="imt-category imt-normal">Normal (18.5 - 24.9)</div>
+              <div class="imt-category imt-overweight">Gemuk (25.0 - 29.9)</div>
+              <div class="imt-category imt-obese">Obesitas (≥ 30.0)</div>
+            </div>
+            
+            <div class="imt-result" id="imtResult">
+              Hasil IMT Anda: <span id="imtResultValue">24.2</span> (Normal)
+            </div>
+          </div>
+
+          <!-- Progress Chart Section -->
+          <div class="metric-card" style="grid-column: 1 / -1; margin-top: 20px;">
+            <h3 class="section-title">
+              <span class="section-icon">📈</span>
+              Grafik Progres Latihan
+            </h3>
+            <div class="progress-chart-container">
+              <canvas id="progressChart"></canvas>
+            </div>
+            <p id="progressAnalysis">Mulai analisis untuk melihat progres latihan Anda.</p>
+          </div>
+
+          <div class="body-type-info">
+            <h4><span class="section-icon">💡</span> Informasi Tipe Tubuh</h4>
+            <p id="bodyTypeInfo">Informasi detail tentang tipe tubuh akan muncul di sini</p>
+          </div>
+
+          <!-- Recommendations Section -->
+          <div class="metric-card" style="grid-column: 1 / -1; margin-top: 20px;">
+            <h3>
+              🎯 Rekomendasi Kesehatan & Fitness
+              <span id="goalBadge" class="goal-badge goal-normal">Normal</span>
+            </h3>
+            
+            <div class="recommendation-tabs">
+              <button class="tab-btn active" data-tab="general">Rekomendasi Umum</button>
+              <button class="tab-btn" data-tab="food">Menu Makanan</button>
+              <button class="tab-btn" data-tab="exercise">Latihan & Workout</button>
+            </div>
+
+            <div class="tab-content active" id="general-tab">
+              <div id="recommendations">
+                <p>Rekomendasi akan muncul di sini berdasarkan analisis bentuk tubuh dan kadar lemak</p>
+              </div>
+            </div>
+
+            <div class="tab-content" id="food-tab">
+              <div class="food-grid" id="foodRecommendations">
+                <!-- Food recommendations will be generated here -->
+              </div>
+            </div>
+
+            <div class="tab-content" id="exercise-tab">
+              <div class="exercise-grid" id="exerciseRecommendations">
+                <!-- Exercise recommendations will be generated here -->
+              </div>
+            </div>
+          </div>
+          
+          <!-- Download Section -->
+          <div class="download-section" id="downloadSection" style="display: none;">
+            <h3 class="section-title">
+              <span class="section-icon">📄</span>
+              Unduh Laporan Lengkap
+            </h3>
+            <p>Unduh laporan lengkap analisis tubuh Anda beserta rekomendasi makanan dan latihan.</p>
+            
+            <div class="download-loading" id="downloadLoading">
+              <div class="download-spinner"></div>
+              <span>Membuat laporan...</span>
+            </div>
+            
+            <button class="download-btn" id="downloadPdfBtn">
+              <span>📥</span> Unduh Laporan PDF
+            </button>
+            
+            <div class="quick-download-options">
+              <button class="quick-download-btn" onclick="downloadSummary()">
+                <span>📄</span> Ringkasan Text
+              </button>
+              <button class="quick-download-btn" onclick="downloadAsImage()">
+                <span>🖼️</span> Simpan Gambar
+              </button>
+              <button class="quick-download-btn" onclick="shareResults()">
+                <span>📤</span> Bagikan Hasil
+              </button>
+            </div>
+            
+            <div class="download-status" id="downloadStatus"></div>
+          </div>
+
+          <!-- Reset Section -->
+          <div class="reset-section" id="resetSection" style="display: none;">
+            <h3 class="section-title">
+              <span class="section-icon">🔄</span>
+              Analisis Ulang
+            </h3>
+            <p>Ingin menganalisis foto yang berbeda atau mencoba lagi? Reset AI untuk memulai analisis baru.</p>
+            
+            <button class="reset-btn" id="resetResultBtn">
+              <span>🔄</span> Reset AI & Mulai Analisis Baru
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="footer">
+      <p>© 2023 BodyMentorAI - AI Body Analyzer | Analisis Bentuk Tubuh & Kadar Lemak</p>
+    </div>
+  </div>
+
+  <!-- PDF Preview Modal -->
+  <div class="pdf-preview" id="pdfPreview">
+    <button class="close-preview" id="closePreview">×</button>
+    <div class="pdf-preview-content" id="pdfPreviewContent">
+      <!-- PDF preview akan ditampilkan di sini -->
+    </div>
+  </div>
+
+  <script>
+    // Global variables
+    let net;
+    let userImage = null;
+    let modelReady = false;
+    let lastAnalysis = null;
+    let cameraStream = null;
+    let userGender = 'male';
+    let currentUserId = null;
+    let progressChart = null;
+
+    // Admin credentials
+    const ADMIN_CREDENTIALS = {
+      username: "admin",
+      password: "admin123"
+    };
+
+    // Storage keys
+    const STORAGE_KEYS = {
+      USER_SESSIONS: 'bodymentor_user_sessions',
+      USER_PROFILES: 'bodymentor_user_profiles',
+      SYSTEM_STATS: 'bodymentor_system_stats'
+    };
+
+    // Data referensi proporsi ideal
+    const bodyData = {
+      male: {
+        idealWaistHipRatio: 0.90,
+        idealShoulderHipRatio: 1.35,
+        fatRanges: { excellent: 12, good: 18, fair: 24, poor: 30 }
+      },
+      female: {
+        idealWaistHipRatio: 0.75,
+        idealShoulderHipRatio: 1.0,
+        fatRanges: { excellent: 18, good: 24, fair: 30, poor: 36 }
+      }
+    };
+
+    // Data rekomendasi makanan lokal Indonesia
+    const foodRecommendations = {
+      underweight: [
+        {
+          name: "Nasi Goreng Telur dengan Daging Cincang",
+          description: "Nasi goreng kaya kalori dan protein, cocok untuk menaikkan berat badan",
+          image: "https://images.unsplash.com/photo-1555939594-58d7cb561ad1?w=400&h=300&fit=crop",
+          calories: "550",
+          protein: "25g",
+          carbs: "70g",
+          benefits: [
+            "Murah dan mudah dibuat",
+            "Tinggi kalori untuk surplus energi",
+            "Protein dari telur dan daging",
+            "Bisa ditambah sayuran untuk nutrisi lengkap"
+          ],
+          tips: "Tambahkan mentega/margarin ekstra untuk kalori tambahan"
+        },
+        {
+          name: "Bubur Ayam Komplet",
+          description: "Bubur dengan topping lengkap: ayam suwir, telur, kacang kedelai",
+          image: "https://images.unsplash.com/photo-1563245372-f21724e3856d?w=400&h=300&fit=crop",
+          calories: "480",
+          protein: "30g",
+          carbs: "65g",
+          benefits: [
+            "Mudah dicerna",
+            "Protein tinggi dari ayam dan telur",
+            "Karbohidrat kompleks",
+            "Kaya mineral dari kuah kaldu"
+          ],
+          tips: "Taburi bawang goreng dan seledri untuk rasa ekstra"
+        },
+        {
+          name: "Nasi + Rendang + Sayur Nangka",
+          description: "Makanan padat kalori dengan protein tinggi",
+          image: "https://images.unsplash.com/photo-1586190848861-99aa4a171e90?w=400&h=300&fit=crop",
+          calories: "650",
+          protein: "35g",
+          carbs: "75g",
+          benefits: [
+            "Rendang kaya protein dan lemak sehat",
+            "Sayur nangka tinggi serat",
+            "Santan memberikan kalori tambahan",
+            "Menu lengkap nutrisi"
+          ],
+          tips: "Pilih daging sapi tanpa lemak untuk protein maksimal"
+        }
+      ],
+      normal: [
+        {
+          name: "Nasi + Ikan Pepes + Sayur Asem",
+          description: "Menu seimbang dengan protein ikan, karbohidrat, dan sayuran",
+          image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop",
+          calories: "450",
+          protein: "35g",
+          carbs: "55g",
+          benefits: [
+            "Protein ikan lebih sehat dari daging merah",
+            "Sayur asem kaya serat dan vitamin",
+            "Rendah lemak jenuh",
+            "Porsi seimbang untuk maintenance"
+          ],
+          tips: "Gunakan ikan kembung atau mujair yang lebih murah"
+        },
+        {
+          name: "Gado-gado dengan Telur",
+          description: "Salad khas Indonesia dengan bumbu kacang dan protein lengkap",
+          image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?w=400&h=300&fit=crop",
+          calories: "420",
+          protein: "28g",
+          carbs: "50g",
+          benefits: [
+            "Sayuran segar berbagai jenis",
+            "Protein dari tahu, tempe, dan telur",
+            "Lemak sehat dari kacang",
+            "Makanan utuh tanpa pengolahan berat"
+          ],
+          tips: "Kurangi gula dalam bumbu kacang untuk versi lebih sehat"
+        },
+        {
+          name: "Nasi + Ayam Bakar + Lalapan",
+          description: "Menu rendah lemak dengan protein berkualitas",
+          image: "https://images.unsplash.com/photo-1603133872878-684f208fb84b?w=400&h=300&fit=crop",
+          calories: "480",
+          protein: "40g",
+          carbs: "50g",
+          benefits: [
+            "Ayam bakar tanpa kulit rendah lemak",
+            "Lalapan kaya serat dan antioksidan",
+            "Protein tinggi untuk perbaikan otot",
+            "Sambal meningkatkan metabolisme"
+          ],
+          tips: "Bakar ayam tanpa minyak berlebihan"
+        }
+      ],
+      overweight: [
+        {
+          name: "Nasi Merah + Tumis Tahu Tempe + Lalapan",
+          description: "Menu rendah kalori dengan karbohidrat kompleks dan protein nabati",
+          image: "https://images.unsplash.com/photo-1565958011703-44f9829ba187?w=400&h=300&fit=crop",
+          calories: "380",
+          protein: "32g",
+          carbs: "45g",
+          benefits: [
+            "Nasi merah lebih tinggi serat",
+            "Protein nabati rendah lemak",
+            "Lalapan kaya serat dan vitamin",
+            "Rendah kalori tapi mengenyangkan"
+          ],
+          tips: "Tumis dengan sedikit minyak atau pakai teknik rebus/kukus"
+        },
+        {
+          name: "Sop Ayam dengan Jamur",
+          description: "Sup rendah kalori kaya protein dan serat",
+          image: "https://images.unsplash.com/photo-1547592180-85f173990554?w=400&h=300&fit=crop",
+          calories: "320",
+          protein: "40g",
+          carbs: "25g",
+          benefits: [
+            "Kaldu ayam rendah lemak",
+            "Jamur kaya serat dan antioksidan",
+            "Sayuran beragam warna",
+            "Cairan membantu rasa kenyang"
+          ],
+          tips: "Buang kulit ayam dan ambil bagian dada untuk protein maksimal"
+        },
+        {
+          name: "Urap Sayuran + Telur Rebus",
+          description: "Sayuran kukus dengan kelapa parut dan protein",
+          image: "https://images.unsplash.com/photo-1490818387583-1baba5e638af?w=400&h=300&fit=crop",
+          calories: "350",
+          protein: "25g",
+          carbs: "30g",
+          benefits: [
+            "Sayuran kukus mempertahankan nutrisi",
+            "Kelapa parut memberikan lemak sehat",
+            "Telur rebus protein tinggi",
+            "Sangat rendah kalori"
+          ],
+          tips: "Gunakan kelapa parut segar tanpa tambahan gula"
+        }
+      ]
+    };
+
+    // Data rekomendasi latihan
+    const exerciseRecommendations = {
+      underweight: [
+        {
+          name: "Strength Training - Full Body",
+          description: "Latihan kekuatan untuk membangun massa otot",
+          videoId: "IODxDxX7oi4",
+          duration: "45-60 menit",
+          intensity: "Sedang",
+          frequency: "3-4x/minggu",
+          steps: [
+            "Compound exercises: Squat, Deadlift, Bench Press",
+            "8-12 repetisi per set",
+            "3-4 set per exercise",
+            "Istirahat 60-90 detik antar set"
+          ]
+        },
+        {
+          name: "Bodyweight Training - Calisthenics",
+          description: "Latihan menggunakan berat badan sendiri",
+          videoId: "eGo4IYlbE5g",
+          duration: "30-45 menit",
+          intensity: "Ringan-Sedang",
+          frequency: "4-5x/minggu",
+          steps: [
+            "Push-up 3x15 repetisi",
+            "Pull-up/Chin-up 3x8 repetisi",
+            "Squat 3x20 repetisi",
+            "Plank 3x60 detik"
+          ]
+        }
+      ],
+      normal: [
+        {
+          name: "Full Body Circuit Training",
+          description: "Latihan seluruh tubuh untuk kebugaran",
+          videoId: "ml6cT4AZdqI",
+          duration: "45 menit",
+          intensity: "Sedang-Tinggi",
+          frequency: "3-4x/minggu",
+          steps: [
+            "Squat - 15 repetisi",
+            "Push-up - 12 repetisi",
+            "Lunges - 10 repetisi per kaki",
+            "Plank - 45 detik",
+            "Jumping Jacks - 30 detik"
+          ]
+        },
+        {
+          name: "HIIT Workout - Pembakar Lemak",
+          description: "High Intensity Interval Training untuk metabolisme cepat",
+          videoId: "2MoGxae-zyo",
+          duration: "20-30 menit",
+          intensity: "Tinggi",
+          frequency: "3x/minggu",
+          steps: [
+            "Burpees 30 detik, istirahat 15 detik",
+            "Mountain Climbers 30 detik, istirahat 15 detik",
+            "High Knees 30 detik, istirahat 15 detik",
+            "Repeat circuit 4-5 kali"
+          ]
+        }
+      ],
+      overweight: [
+        {
+          name: "Low Impact Cardio - Pembakar Lemak",
+          description: "Kardio intensitas rendah untuk membakar lemak",
+          videoId: "CB2cZ0JgQjo",
+          duration: "30-45 menit",
+          intensity: "Ringan-Sedang",
+          frequency: "4-5x/minggu",
+          steps: [
+            "Pemanasan 5 menit",
+            "Jalan cepat 25-35 menit",
+            "Pendinginan 5 menit",
+            "Regangkan otot utama"
+          ]
+        },
+        {
+          name: "Yoga & Stretching",
+          description: "Latihan fleksibilitas dan relaksasi",
+          videoId: "v7AYKMP6rOE",
+          duration: "20-30 menit",
+          intensity: "Ringan",
+          frequency: "Setiap hari",
+          steps: [
+            "Pose anak (Child's Pose) 1 menit",
+            "Kucing-Sapi (Cat-Cow) 2 menit",
+            "Pose pohon (Tree Pose) 1 menit per sisi",
+            "Savasana 5 menit"
+          ]
+        }
+      ]
+    };
+
+    // ================ FUNGSI UTILITAS ================
+
+    // Generate user ID
+    function generateUserId() {
+      const userName = document.getElementById('userName').value.trim();
+      const gender = userGender;
+      const timestamp = Date.now().toString().slice(-6);
+      
+      if (userName) {
+        return `user_${userName.toLowerCase().replace(/\s+/g, '_')}_${gender}_${timestamp}`;
+      }
+      
+      const randomId = Math.random().toString(36).substr(2, 6);
+      return `user_${gender}_${randomId}_${timestamp}`;
+    }
+
+    // Get user sessions
+    function getUserSessions() {
+      try {
+        const sessions = localStorage.getItem(STORAGE_KEYS.USER_SESSIONS);
+        return sessions ? JSON.parse(sessions) : [];
+      } catch (error) {
+        console.error("Error mengambil sesi:", error);
+        return [];
+      }
+    }
+
+    // Save user session
+    function saveUserSession(userId, analysisData) {
+      try {
+        const sessions = getUserSessions();
+        const userProfile = getUserProfile(userId);
+        
+        // Update or create profile
+        if (!userProfile) {
+          const newProfile = {
+            id: userId,
+            name: document.getElementById('userName').value.trim() || `User ${userId.substr(5, 4)}`,
+            gender: userGender,
+            firstSession: new Date().toISOString(),
+            lastSession: new Date().toISOString(),
+            totalSessions: 1
+          };
+          saveUserProfile(newProfile);
+        } else {
+          userProfile.lastSession = new Date().toISOString();
+          userProfile.totalSessions = (userProfile.totalSessions || 0) + 1;
+          saveUserProfile(userProfile);
+        }
+        
+        // Save session
+        const session = {
+          userId: userId,
+          timestamp: new Date().toISOString(),
+          weight: analysisData.weight,
+          height: analysisData.height,
+          age: analysisData.age,
+          bmi: parseFloat(analysisData.bmi),
+          fatPercentage: parseFloat(analysisData.estimatedFat),
+          waistHipRatio: parseFloat(analysisData.waistHipRatio),
+          bodyShape: analysisData.bodyShape.name
+        };
+        
+        sessions.push(session);
+        localStorage.setItem(STORAGE_KEYS.USER_SESSIONS, JSON.stringify(sessions));
+        
+        // Update system stats
+        updateSystemStats();
+        
+        console.log("Sesi disimpan untuk user:", userId);
+        return true;
+      } catch (error) {
+        console.error("Error menyimpan sesi:", error);
+        return false;
+      }
+    }
+
+    // Get user sessions by ID
+    function getUserSessionsById(userId) {
+      const sessions = getUserSessions();
+      return sessions.filter(session => session.userId === userId)
+                     .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+
+    // Get user profiles
+    function getUserProfiles() {
+      try {
+        const profiles = localStorage.getItem(STORAGE_KEYS.USER_PROFILES);
+        return profiles ? JSON.parse(profiles) : [];
+      } catch (error) {
+        console.error("Error mengambil profil:", error);
+        return [];
+      }
+    }
+
+    // Save user profile
+    function saveUserProfile(profile) {
+      try {
+        const profiles = getUserProfiles();
+        const existingIndex = profiles.findIndex(p => p.id === profile.id);
+        
+        if (existingIndex >= 0) {
+          profiles[existingIndex] = profile;
+        } else {
+          profiles.push(profile);
+        }
+        
+        localStorage.setItem(STORAGE_KEYS.USER_PROFILES, JSON.stringify(profiles));
+        return true;
+      } catch (error) {
+        console.error("Error menyimpan profil:", error);
+        return false;
+      }
+    }
+
+    // Get user profile by ID
+    function getUserProfile(userId) {
+      const profiles = getUserProfiles();
+      return profiles.find(profile => profile.id === userId);
+    }
+
+    // Update system stats
+    function updateSystemStats() {
+      try {
+        const stats = getSystemStats();
+        stats.totalSessions = getUserSessions().length;
+        stats.lastUpdate = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEYS.SYSTEM_STATS, JSON.stringify(stats));
+      } catch (error) {
+        console.error("Error update stats:", error);
+      }
+    }
+
+    // Get system stats
+    function getSystemStats() {
+      try {
+        const stats = localStorage.getItem(STORAGE_KEYS.SYSTEM_STATS);
+        if (stats) return JSON.parse(stats);
+        
+        // Default stats
+        return {
+          totalSessions: 0,
+          lastUpdate: null,
+          totalUsers: 0
+        };
+      } catch (error) {
+        console.error("Error mengambil stats:", error);
+        return {
+          totalSessions: 0,
+          lastUpdate: null,
+          totalUsers: 0
+        };
+      }
+    }
+
+    // Detect user from name
+    function detectUserFromName() {
+      const userName = document.getElementById('userName').value.trim();
+      if (!userName) return null;
+      
+      const profiles = getUserProfiles();
+      const userProfile = profiles.find(profile => 
+        profile.name.toLowerCase() === userName.toLowerCase()
+      );
+      
+      return userProfile ? userProfile.id : null;
+    }
+
+    // Show user progress
+    function showUserProgress(userId) {
+      const sessions = getUserSessionsById(userId);
+      if (sessions.length === 0) return;
+      
+      const latestSession = sessions[0];
+      const profile = getUserProfile(userId);
+      
+      // Update profile display
+      document.getElementById('profileSummary').style.display = 'flex';
+      document.getElementById('profileName').textContent = profile.name;
+      document.getElementById('userAvatar').textContent = profile.name.charAt(0).toUpperCase();
+      
+      const lastSessionDate = new Date(latestSession.timestamp);
+      const now = new Date();
+      const diffDays = Math.floor((now - lastSessionDate) / (1000 * 60 * 60 * 24));
+      
+      let lastSessionText = `Sesi terakhir: ${lastSessionDate.toLocaleDateString('id-ID')}`;
+      if (diffDays > 0) {
+        lastSessionText += ` (${diffDays} hari yang lalu)`;
+      }
+      
+      document.getElementById('profileLastSession').textContent = lastSessionText;
+      
+      // Calculate progress if multiple sessions
+      if (sessions.length > 1) {
+        const firstSession = sessions[sessions.length - 1];
+        const bmiChange = latestSession.bmi - firstSession.bmi;
+        
+        let progressText = '';
+        if (firstSession.bmi < 18.5 && latestSession.bmi >= 18.5 && latestSession.bmi < 25) {
+          progressText = '🎉 Progres luar biasa! Dari underweight ke normal';
+        } else if (firstSession.bmi >= 25 && latestSession.bmi < 25) {
+          progressText = '🎉 Progres luar biasa! Dari overweight ke normal';
+        } else if (Math.abs(bmiChange) < 0.5) {
+          progressText = '⚡ Stabil - pertahankan gaya hidup sehat';
+        } else if (bmiChange < 0) {
+          progressText = '📉 Sedang dalam proses penurunan berat badan';
+        } else {
+          progressText = '📈 Sedang dalam proses peningkatan berat badan';
+        }
+        
+        document.getElementById('profileProgress').textContent = progressText;
+      }
+      
+      // Show update progress form
+      document.getElementById('updateProgressForm').style.display = 'block';
+      
+      // Show recognition status
+      const statusElement = document.getElementById('faceRecognitionStatus');
+      statusElement.style.display = 'block';
+      statusElement.textContent = `👤 Selamat datang kembali ${profile.name}! Menampilkan data terakhir Anda.`;
+      
+      setTimeout(() => {
+        statusElement.style.display = 'none';
+      }, 5000);
+    }
+
+    // Render progress chart dengan area warna
+    function renderProgressChart(userId) {
+      const sessions = getUserSessionsById(userId);
+      if (sessions.length < 2) {
+        document.getElementById('progressAnalysis').textContent = 
+          'Lakukan analisis lagi nanti untuk melihat grafik progres';
+        return;
+      }
+      
+      const ctx = document.getElementById('progressChart').getContext('2d');
+      const sortedSessions = [...sessions].reverse();
+      
+      const labels = sortedSessions.map((session, index) => 
+        `Sesi ${index + 1}`
+      );
+      
+      const bmiData = sortedSessions.map(session => session.bmi);
+      const fatData = sortedSessions.map(session => session.fatPercentage);
+      
+      // Destroy previous chart
+      if (progressChart) {
+        progressChart.destroy();
+      }
+      
+      // Plugin untuk area background
+      const backgroundPlugin = {
+        id: 'customCanvasBackgroundColor',
+        beforeDraw: (chart) => {
+          const ctx = chart.ctx;
+          const yAxis = chart.scales.y;
+          const chartArea = chart.chartArea;
+          
+          // Area Underweight (biru) - BMI < 18.5
+          ctx.fillStyle = 'rgba(52, 152, 219, 0.1)';
+          ctx.fillRect(chartArea.left, yAxis.getPixelForValue(0), 
+                       chartArea.right - chartArea.left, 
+                       yAxis.getPixelForValue(18.5) - yAxis.getPixelForValue(0));
+          
+          // Area Normal (hijau) - BMI 18.5-24.9
+          ctx.fillStyle = 'rgba(39, 174, 96, 0.1)';
+          ctx.fillRect(chartArea.left, yAxis.getPixelForValue(18.5), 
+                       chartArea.right - chartArea.left, 
+                       yAxis.getPixelForValue(25) - yAxis.getPixelForValue(18.5));
+          
+          // Area Overweight (merah) - BMI >= 25
+          ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+          ctx.fillRect(chartArea.left, yAxis.getPixelForValue(25), 
+                       chartArea.right - chartArea.left, 
+                       yAxis.getPixelForValue(40) - yAxis.getPixelForValue(25));
+          
+          // Garis putus-putus untuk batas area
+          ctx.strokeStyle = '#3498db';
+          ctx.setLineDash([5, 5]);
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(chartArea.left, yAxis.getPixelForValue(18.5));
+          ctx.lineTo(chartArea.right, yAxis.getPixelForValue(18.5));
+          ctx.stroke();
+          
+          ctx.strokeStyle = '#e74c3c';
+          ctx.beginPath();
+          ctx.moveTo(chartArea.left, yAxis.getPixelForValue(25));
+          ctx.lineTo(chartArea.right, yAxis.getPixelForValue(25));
+          ctx.stroke();
+          
+          ctx.setLineDash([]);
+          
+          // Label area
+          ctx.fillStyle = '#3498db';
+          ctx.font = '12px Arial';
+          ctx.fillText('Underweight', chartArea.right - 100, yAxis.getPixelForValue(9) - 5);
+          ctx.fillStyle = '#27ae60';
+          ctx.fillText('Normal', chartArea.right - 80, yAxis.getPixelForValue(22) - 5);
+          ctx.fillStyle = '#e74c3c';
+          ctx.fillText('Overweight', chartArea.right - 100, yAxis.getPixelForValue(28) - 5);
+        }
+      };
+      
+      progressChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: 'BMI',
+              data: bmiData,
+              borderColor: '#2c3e50',
+              backgroundColor: 'rgba(44, 62, 80, 0.1)',
+              borderWidth: 3,
+              tension: 0.3,
+              fill: true,
+              pointBackgroundColor: '#2c3e50',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointRadius: 6,
+              yAxisID: 'y'
+            },
+            {
+              label: 'Kadar Lemak %',
+              data: fatData,
+              borderColor: '#9b59b6',
+              backgroundColor: 'rgba(155, 89, 182, 0.1)',
+              borderWidth: 3,
+              tension: 0.3,
+              fill: true,
+              pointBackgroundColor: '#9b59b6',
+              pointBorderColor: '#fff',
+              pointBorderWidth: 2,
+              pointRadius: 6,
+              yAxisID: 'y1'
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              position: 'top',
+              labels: {
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                },
+                padding: 20
+              }
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleFont: {
+                size: 14
+              },
+              bodyFont: {
+                size: 13
+              },
+              padding: 12
+            }
+          },
+          scales: {
+            x: {
+              grid: {
+                color: 'rgba(0, 0, 0, 0.1)'
+              },
+              ticks: {
+                font: {
+                  size: 12
+                }
+              }
+            },
+            y: {
+              type: 'linear',
+              display: true,
+              position: 'left',
+              min: 15,
+              max: 35,
+              ticks: {
+                stepSize: 5,
+                font: {
+                  size: 12
+                },
+                callback: function(value) {
+                  if (value === 18.5 || value === 25) {
+                    return value + ' (batas)';
+                  }
+                  return value;
+                }
+              },
+              title: {
+                display: true,
+                text: 'BMI',
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                },
+                color: '#2c3e50'
+              },
+              grid: {
+                color: function(context) {
+                  if (context.tick.value === 18.5 || context.tick.value === 25) {
+                    return 'rgba(0, 0, 0, 0.3)';
+                  }
+                  return 'rgba(0, 0, 0, 0.1)';
+                },
+                lineWidth: function(context) {
+                  if (context.tick.value === 18.5 || context.tick.value === 25) {
+                    return 2;
+                  }
+                  return 1;
+                }
+              }
+            },
+            y1: {
+              type: 'linear',
+              display: true,
+              position: 'right',
+              min: 10,
+              max: 40,
+              ticks: {
+                stepSize: 5,
+                font: {
+                  size: 12
+                }
+              },
+              title: {
+                display: true,
+                text: 'Kadar Lemak %',
+                font: {
+                  size: 14,
+                  weight: 'bold'
+                },
+                color: '#9b59b6'
+              },
+              grid: {
+                drawOnChartArea: false
+              }
+            }
+          },
+          interaction: {
+            intersect: false,
+            mode: 'index'
+          },
+          elements: {
+            line: {
+              tension: 0.3
+            }
+          }
+        },
+        plugins: [backgroundPlugin]
+      });
+      
+      // Analyze progress
+      const firstSession = sortedSessions[0];
+      const latestSession = sortedSessions[sortedSessions.length - 1];
+      const bmiChange = latestSession.bmi - firstSession.bmi;
+      
+      let analysisText = '';
+      if (firstSession.bmi < 18.5 && latestSession.bmi >= 18.5 && latestSession.bmi < 25) {
+        analysisText = '🎉 PROGRES LUAR BIASA! Anda telah berhasil meningkatkan BMI dari underweight ke normal.';
+      } else if (firstSession.bmi >= 25 && latestSession.bmi < 25) {
+        analysisText = '🎉 PROGRES LUAR BIASA! Anda telah berhasil menurunkan BMI dari overweight ke normal.';
+      } else if (bmiChange < -1) {
+        analysisText = '📈 Progres sangat baik! BMI menurun secara signifikan.';
+      } else if (Math.abs(bmiChange) < 0.5) {
+        analysisText = '⚡ Kondisi stabil. Pertahankan gaya hidup sehat Anda.';
+      } else if (bmiChange > 0.5) {
+        analysisText = '⚠️ Perhatian: Ada peningkatan BMI. Evaluasi pola makan dan latihan.';
+      } else {
+        analysisText = '📊 Terus pantau progres Anda. Konsistensi adalah kunci.';
+      }
+      
+      document.getElementById('progressAnalysis').innerHTML = analysisText;
+    }
+
+    // ================ FUNGSI ADMIN ================
+
+    // Show login modal
+    function showLoginModal() {
+      document.getElementById('loginModal').style.display = 'flex';
+    }
+
+    // Close login modal
+    function closeLoginModal() {
+      document.getElementById('loginModal').style.display = 'none';
+      document.getElementById('loginError').style.display = 'none';
+      document.getElementById('username').value = '';
+      document.getElementById('password').value = '';
+    }
+
+    // Login admin
+    function loginAdmin() {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const errorElement = document.getElementById('loginError');
+      
+      if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
+        closeLoginModal();
+        showAdminPanel();
+      } else {
+        errorElement.textContent = 'Username atau password salah!';
+        errorElement.style.display = 'block';
+      }
+    }
+
+    // Show admin panel
+    function showAdminPanel() {
+      document.getElementById('adminPanel').style.display = 'block';
+      loadAdminData();
+    }
+
+    // Close admin panel
+    function closeAdminPanel() {
+      document.getElementById('adminPanel').style.display = 'none';
+    }
+
+    // Load admin data
+    function loadAdminData() {
+      loadUserProgress();
+      loadSystemAnalytics();
+    }
+
+    // Setup admin tabs
+    function setupAdminTabs() {
+      const tabs = document.querySelectorAll('.admin-tab');
+      tabs.forEach(tab => {
+        tab.addEventListener('click', function() {
+          const tabName = this.getAttribute('data-tab');
+          
+          // Update active tab
+          tabs.forEach(t => t.classList.remove('active'));
+          this.classList.add('active');
+          
+          // Update active content
+          document.querySelectorAll('.admin-tab-content').forEach(content => {
+            content.classList.remove('active');
+          });
+          document.getElementById(`${tabName}-tab`).classList.add('active');
+        });
+      });
+    }
+
+    // Load user progress for admin
+    function loadUserProgress() {
+      const profiles = getUserProfiles();
+      const sessions = getUserSessions();
+      const grid = document.getElementById('userProgressGrid');
+      
+      grid.innerHTML = '';
+      
+      if (profiles.length === 0) {
+        grid.innerHTML = `
+          <div class="no-progress-data">
+            <p>📊 Belum ada data pengguna</p>
+            <p>Pengguna akan muncul di sini setelah melakukan analisis</p>
+          </div>
+        `;
+        return;
+      }
+      
+      profiles.forEach(profile => {
+        const userSessions = sessions.filter(s => s.userId === profile.id);
+        if (userSessions.length === 0) return;
+        
+        const firstSession = userSessions[userSessions.length - 1];
+        const latestSession = userSessions[0];
+        
+        const bmiChange = latestSession.bmi - firstSession.bmi;
+        
+        let progressStatus = 'stable';
+        let progressText = 'Stabil';
+        
+        if ((firstSession.bmi < 18.5 && latestSession.bmi >= 18.5) || 
+            (firstSession.bmi >= 25 && latestSession.bmi < 25)) {
+          progressStatus = 'improving';
+          progressText = 'Meningkat';
+        } else if (bmiChange > 2) {
+          progressStatus = 'declining';
+          progressText = 'Menurun';
+        }
+        
+        const card = document.createElement('div');
+        card.className = 'user-progress-card';
+        card.innerHTML = `
+          <div class="user-avatar">${profile.name.charAt(0).toUpperCase()}</div>
+          <h4>${profile.name}</h4>
+          <p><strong>Gender:</strong> ${profile.gender === 'male' ? 'Pria' : 'Wanita'}</p>
+          <p><strong>Total Sesi:</strong> ${userSessions.length}</p>
+          
+          <div class="progress-stats">
+            <div class="stat-item">
+              <div class="stat-value">${latestSession.bmi.toFixed(1)}</div>
+              <div class="stat-label">BMI Terakhir</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">${latestSession.fatPercentage.toFixed(1)}%</div>
+              <div class="stat-label">Lemak</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">${bmiChange.toFixed(1)}</div>
+              <div class="stat-label">Δ BMI</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-value">${latestSession.waistHipRatio.toFixed(2)}</div>
+              <div class="stat-label">Rasio WH</div>
+            </div>
+          </div>
+          
+          <div class="progress-badge badge-${progressStatus}">
+            ${progressText}
+          </div>
+          
+          <div class="session-history">
+            <h5>3 Sesi Terakhir:</h5>
+            ${userSessions.slice(0, 3).map(session => `
+              <div class="session-item">
+                <div class="session-date">${new Date(session.timestamp).toLocaleDateString('id-ID')}</div>
+                <div class="session-metrics">
+                  <div>BMI: ${session.bmi.toFixed(1)}</div>
+                  <div>Lemak: ${session.fatPercentage.toFixed(1)}%</div>
+                  <div>WH: ${session.waistHipRatio.toFixed(2)}</div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        `;
+        
+        grid.appendChild(card);
+      });
+    }
+
+    // Load system analytics
+    function loadSystemAnalytics() {
+      const stats = getSystemStats();
+      const sessions = getUserSessions();
+      const profiles = getUserProfiles();
+      
+      // Calculate BMI distribution
+      const bmiDistribution = {
+        underweight: 0,
+        normal: 0,
+        overweight: 0,
+        obese: 0
+      };
+      
+      sessions.forEach(session => {
+        if (session.bmi < 18.5) bmiDistribution.underweight++;
+        else if (session.bmi < 25) bmiDistribution.normal++;
+        else if (session.bmi < 30) bmiDistribution.overweight++;
+        else bmiDistribution.obese++;
+      });
+      
+      const ctx = document.getElementById('systemAnalyticsChart').getContext('2d');
+      
+      // Destroy previous chart if exists
+      const existingChart = Chart.getChart('systemAnalyticsChart');
+      if (existingChart) {
+        existingChart.destroy();
+      }
+      
+      new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Underweight', 'Normal', 'Overweight', 'Obese'],
+          datasets: [{
+            data: [
+              bmiDistribution.underweight,
+              bmiDistribution.normal,
+              bmiDistribution.overweight,
+              bmiDistribution.obese
+            ],
+            backgroundColor: [
+              '#3498db',
+              '#27ae60',
+              '#f39c12',
+              '#e74c3c'
+            ]
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { position: 'top' },
+            title: {
+              display: true,
+              text: `Distribusi BMI - Total Sesi: ${sessions.length}, Pengguna: ${profiles.length}`
+            }
+          }
+        }
+      });
+    }
+
+    // Clear all data
+    function clearAllData() {
+      if (confirm('Apakah Anda yakin ingin menghapus SEMUA data? Tindakan ini tidak dapat dibatalkan!')) {
+        localStorage.removeItem(STORAGE_KEYS.USER_SESSIONS);
+        localStorage.removeItem(STORAGE_KEYS.USER_PROFILES);
+        localStorage.removeItem(STORAGE_KEYS.SYSTEM_STATS);
+        alert('Semua data telah dihapus!');
+        loadAdminData();
+      }
+    }
+
+    // Export data
+    function exportData() {
+      const data = {
+        sessions: getUserSessions(),
+        profiles: getUserProfiles(),
+        stats: getSystemStats(),
+        exportDate: new Date().toISOString()
+      };
+      
+      const dataStr = JSON.stringify(data, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      
+      const exportFileDefaultName = `bodymentor-export-${new Date().toISOString().split('T')[0]}.json`;
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    }
+
+    // Backup data
+    function backupData() {
+      const backup = {
+        sessions: getUserSessions(),
+        profiles: getUserProfiles(),
+        stats: getSystemStats(),
+        backupDate: new Date().toISOString()
+      };
+      
+      localStorage.setItem('bodymentor_backup_' + Date.now(), JSON.stringify(backup));
+      alert('Backup berhasil disimpan di localStorage!');
+    }
+
+    // ================ FUNGSI UTAMA ================
+
+    // Show update progress form
+    function showUpdateProgressForm() {
+      const currentWeight = document.getElementById('weightInput').value;
+      const currentHeight = document.getElementById('heightInput').value;
+      const currentAge = document.getElementById('ageInput').value;
+      
+      const newWeight = prompt(`Update berat badan Anda (kg):`, currentWeight);
+      if (newWeight !== null) {
+        document.getElementById('weightInput').value = parseFloat(newWeight);
+      }
+      
+      const newHeight = prompt(`Update tinggi badan Anda (cm):`, currentHeight);
+      if (newHeight !== null) {
+        document.getElementById('heightInput').value = parseFloat(newHeight);
+      }
+      
+      const newAge = prompt(`Update usia Anda:`, currentAge);
+      if (newAge !== null) {
+        document.getElementById('ageInput').value = parseInt(newAge);
+      }
+      
+      alert('Data berhasil diupdate! Lakukan analisis lagi untuk melihat progres terbaru.');
+    }
+
+    // Initialize app
+    function initializeApp() {
+      try {
+        setupEventListeners();
+        setupInputListeners();
+        setupAdminTabs();
+        checkCameraAvailability();
+        
+        // Set placeholder images
+        const idealFemaleBase64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZThmNGZjIi8+CiAgPGNpcmNsZSBjeD0iMTUwIiBjeT0iMTAwIiByPSI0MCIgZmlsbD0iIzM0OThkYiIvPgogIDxyZWN0IHg9IjEwMCIgeT0iMTUwIiB3aWR0aD0iMTAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzM0OThkYiIvPgogIDx0ZXh0IHg9IjE1MCIgeT0iMzUwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBmaWxsPSIjMzMzIiBmb250LXNpemU9IjE0Ij5SZWZlcmVuc2kgV2FuaXRhPC90ZXh0Pgo8L3N2Zz4K";
+        const idealMaleBase64 = "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzAwIiBoZWlnaHQ9IjQwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KICA8cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjBmOGY4Ii8+CiAgPGNpcmNsZSBjeD0iMTUwIiBjeT0iMTAwIiByPSI1MCIgZmlsbD0iIzJlN2M3ZSIvPgogIDxyZWN0IHg9IjExMCIgeT0iMTUwIiB3aWR0aD0iODAiIGhlaWdodD0iMjAwIiBmaWxsPSIjMmU3YzdlIi8+CiAgPHRleHQgeD0iMTUwIiB5PSIzNTAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiMzMzMiIGZvbnQtc2l6ZT0iMTQiPlJlZmVyZW5zaSBQcmlhPC90ZXh0Pgo8L3N2Zz4K";
+
+        document.getElementById('idealFemale').src = idealFemaleBase64;
+        document.getElementById('idealMale').src = idealMaleBase64;
+        
+        // Load PoseNet model
+        loadPoseNet();
+        
+        console.log("Aplikasi siap digunakan");
+      } catch (error) {
+        console.error("Error inisialisasi aplikasi:", error);
+        showError("Gagal memulai aplikasi. Silakan refresh halaman.");
+      }
+    }
+
+    // Load PoseNet model
+    async function loadPoseNet() {
+      try {
+        console.log("Memuat model PoseNet...");
+        
+        net = await posenet.load({
+          architecture: 'MobileNetV1',
+          outputStride: 16,
+          inputResolution: 257,
+          multiplier: 0.75
+        });
+        
+        modelReady = true;
+        console.log("Model PoseNet berhasil dimuat.");
+      } catch (err) {
+        console.error("Error memuat model PoseNet:", err);
+        throw new Error("Gagal memuat model AI. Silakan refresh halaman.");
+      }
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+      // File upload
+      const fileInput = document.getElementById('fileInput');
+      if (fileInput) {
+        fileInput.addEventListener('change', handleFileUpload);
+      }
+      
+      // Analyze button
+      const analyzeBtn = document.getElementById('analyzeBtn');
+      if (analyzeBtn) {
+        analyzeBtn.addEventListener('click', analyzeImage);
+      }
+      
+      // Camera button
+      const cameraBtn = document.getElementById('cameraBtn');
+      if (cameraBtn) {
+        cameraBtn.addEventListener('click', openCamera);
+      }
+      
+      // Capture button
+      const captureBtn = document.getElementById('captureBtn');
+      if (captureBtn) {
+        captureBtn.addEventListener('click', captureImage);
+      }
+      
+      // Close camera button
+      const closeCameraBtn = document.getElementById('closeCameraBtn');
+      if (closeCameraBtn) {
+        closeCameraBtn.addEventListener('click', closeCamera);
+      }
+      
+      // Reset buttons
+      const resetBtn = document.getElementById('resetBtn');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', resetApp);
+      }
+      
+      const resetResultBtn = document.getElementById('resetResultBtn');
+      if (resetResultBtn) {
+        resetResultBtn.addEventListener('click', resetApp);
+      }
+      
+      // Gender selection
+      document.querySelectorAll('.gender-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          document.querySelectorAll('.gender-btn').forEach(b => b.classList.remove('active'));
+          this.classList.add('active');
+          userGender = this.getAttribute('data-gender');
+        });
+      });
+
+      // Tab selection
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+          const tabName = this.getAttribute('data-tab');
+          switchTab(tabName);
+        });
+      });
+      
+      // PDF buttons
+      document.getElementById('downloadPdfBtn').addEventListener('click', () => generatePDF(false));
+      
+      // Close PDF preview
+      document.getElementById('closePreview').addEventListener('click', () => {
+        document.getElementById('pdfPreview').style.display = 'none';
+      });
+      
+      // Setup admin tabs
+      setupAdminTabs();
+    }
+
+    // Setup input listeners
+    function setupInputListeners() {
+      const weightInput = document.getElementById('weightInput');
+      const heightInput = document.getElementById('heightInput');
+      
+      if (weightInput && heightInput) {
+        weightInput.addEventListener('input', updateIMTPreview);
+        heightInput.addEventListener('input', updateIMTPreview);
+      }
+    }
+
+    // Update IMT preview
+    function updateIMTPreview() {
+      const weight = parseFloat(document.getElementById('weightInput').value) || 70;
+      const height = parseFloat(document.getElementById('heightInput').value) || 170;
+      
+      const heightInMeters = height / 100;
+      const heightSquared = (heightInMeters * heightInMeters).toFixed(2);
+      const calculatedBMI = (weight / heightSquared).toFixed(1);
+      
+      // Update elements jika ada
+      const calcHeight = document.getElementById('calcHeight');
+      const calcHeightMeters = document.getElementById('calcHeightMeters');
+      const calcHeightMeters2 = document.getElementById('calcHeightMeters2');
+      const calcHeightMeters2b = document.getElementById('calcHeightMeters2b');
+      const calcWeight = document.getElementById('calcWeight');
+      const calcWeight2 = document.getElementById('calcWeight2');
+      const calcHeightSquared = document.getElementById('calcHeightSquared');
+      const calcHeightSquared2 = document.getElementById('calcHeightSquared2');
+      const finalIMT = document.getElementById('finalIMT');
+      
+      // Update hanya jika elemen ada
+      if (calcHeight) calcHeight.textContent = height;
+      if (calcHeightMeters) calcHeightMeters.textContent = heightInMeters.toFixed(2);
+      if (calcHeightMeters2) calcHeightMeters2.textContent = heightInMeters.toFixed(2);
+      if (calcHeightMeters2b) calcHeightMeters2b.textContent = heightInMeters.toFixed(2);
+      if (calcWeight) calcWeight.textContent = weight;
+      if (calcWeight2) calcWeight2.textContent = weight;
+      if (calcHeightSquared) calcHeightSquared.textContent = heightSquared;
+      if (calcHeightSquared2) calcHeightSquared2.textContent = heightSquared;
+      if (finalIMT) finalIMT.textContent = calculatedBMI;
+    }
+
+    // Switch tab
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      document.querySelector(`.tab-btn[data-tab="${tabName}"]`).classList.add('active');
+
+      document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.remove('active');
+      });
+      document.getElementById(`${tabName}-tab`).classList.add('active');
+    }
+
+    // Handle file upload
+    function handleFileUpload(e) {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (!file.type.match('image.*')) {
+        showError("Silakan pilih file gambar (JPEG, PNG, dll)");
+        return;
+      }
+      
+      if (file.size > 5 * 1024 * 1024) {
+        showError("Ukuran file terlalu besar. Maksimal 5MB.");
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        userImage = new Image();
+        userImage.onload = () => {
+          displayUserImage();
+          hideError();
+          lastAnalysis = null;
+          document.getElementById('results').style.display = 'none';
+          document.getElementById('resetBtn').style.display = 'flex';
+          document.getElementById('downloadSection').style.display = 'none';
+          
+          // Check if user exists
+          const detectedUserId = detectUserFromName();
+          if (detectedUserId) {
+            currentUserId = detectedUserId;
+            showUserProgress(detectedUserId);
+          }
+        };
+        userImage.onerror = () => {
+          showError("Gagal memuat gambar. Silakan coba dengan gambar lain.");
+        };
+        userImage.src = evt.target.result;
+      };
+      reader.onerror = () => {
+        showError("Gagal membaca file. Silakan coba lagi.");
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // Display user image
+    function displayUserImage() {
+      const canvas = document.getElementById('userCanvas');
+      const ctx = canvas.getContext('2d');
+      const keypointCanvas = document.getElementById('keypointCanvas');
+      const keypointCtx = keypointCanvas.getContext('2d');
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      keypointCtx.clearRect(0, 0, keypointCanvas.width, keypointCanvas.height);
+      
+      const maxWidth = 400;
+      const maxHeight = 400;
+      
+      let width = userImage.width;
+      let height = userImage.height;
+      
+      if (width > maxWidth) {
+        height = (maxWidth / width) * height;
+        width = maxWidth;
+      }
+      
+      if (height > maxHeight) {
+        width = (maxHeight / height) * width;
+        height = maxHeight;
+      }
+      
+      canvas.width = width;
+      canvas.height = height;
+      keypointCanvas.width = width;
+      keypointCanvas.height = height;
+      
+      ctx.drawImage(userImage, 0, 0, width, height);
+      
+      document.getElementById('previewImage').style.display = 'none';
+      document.getElementById('placeholderText').style.display = 'none';
+      canvas.style.display = 'block';
+      
+      document.getElementById('cameraVideo').style.display = 'none';
+      document.getElementById('cameraCanvas').style.display = 'none';
+    }
+
+    // Open camera
+    async function openCamera() {
+      try {
+        document.getElementById('cameraStatus').textContent = "Mengakses kamera...";
+        document.getElementById('cameraBtn').disabled = true;
+        
+        document.getElementById('cameraPermissionInfo').style.display = 'block';
+        
+        if (cameraStream) {
+          cameraStream.getTracks().forEach(track => track.stop());
+        }
+        
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Browser Anda tidak mendukung akses kamera");
+        }
+        
+        const constraints = {
+          video: { 
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            facingMode: 'user'
+          },
+          audio: false
+        };
+        
+        cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+        
+        const video = document.getElementById('cameraVideo');
+        video.srcObject = cameraStream;
+        
+        return new Promise((resolve, reject) => {
+          video.onloadedmetadata = () => {
+            video.play().then(() => {
+              video.style.display = 'block';
+              document.getElementById('placeholderText').style.display = 'none';
+              document.getElementById('userCanvas').style.display = 'none';
+              document.getElementById('previewImage').style.display = 'none';
+              document.getElementById('cameraControls').style.display = 'flex';
+              document.getElementById('cameraStatus').textContent = "Kamera aktif - Posisikan diri Anda dan klik 'Ambil Foto'";
+              document.getElementById('cameraBtn').disabled = false;
+              document.getElementById('cameraBtn').innerHTML = '<span>📷</span> Kamera Aktif';
+              document.getElementById('resetBtn').style.display = 'flex';
+              hideError();
+              resolve();
+            }).catch(reject);
+          };
+          
+          video.onerror = reject;
+        });
+        
+      } catch (error) {
+        console.error("Error mengakses kamera:", error);
+        document.getElementById('cameraBtn').disabled = false;
+        document.getElementById('cameraBtn').innerHTML = '<span>📷</span> Buka Kamera';
+        
+        let errorMessage = "Tidak dapat mengakses kamera. ";
+        
+        if (error.name === 'NotAllowedError') {
+          errorMessage += "Izin akses kamera ditolak.";
+        } else if (error.name === 'NotFoundError') {
+          errorMessage += "Tidak ada kamera yang ditemukan.";
+        } else if (error.name === 'NotSupportedError') {
+          errorMessage += "Browser Anda tidak mendukung akses kamera.";
+        } else {
+          errorMessage += "Error: " + error.message;
+        }
+        
+        showError(errorMessage);
+      }
+    }
+
+    // Capture image
+    function captureImage() {
+      try {
+        const video = document.getElementById('cameraVideo');
+        const canvas = document.getElementById('cameraCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (!video.videoWidth || !video.videoHeight) {
+          throw new Error("Video belum siap. Tunggu sebentar.");
+        }
+        
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        
+        userImage = new Image();
+        userImage.onload = () => {
+          displayUserImage();
+          closeCamera();
+        };
+        userImage.onerror = () => {
+          showError("Gagal membuat gambar dari kamera.");
+        };
+        userImage.src = canvas.toDataURL('image/png');
+        
+        document.getElementById('cameraStatus').textContent = "Foto berhasil diambil! Klik 'Analisis dengan AI' untuk memproses.";
+      } catch (error) {
+        console.error("Error mengambil foto:", error);
+        showError("Gagal mengambil foto: " + error.message);
+      }
+    }
+
+    // Close camera
+    function closeCamera() {
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop());
+        cameraStream = null;
+      }
+      
+      document.getElementById('cameraVideo').style.display = 'none';
+      document.getElementById('cameraControls').style.display = 'none';
+      document.getElementById('cameraStatus').textContent = "";
+      document.getElementById('cameraBtn').innerHTML = '<span>📷</span> Buka Kamera';
+      document.getElementById('cameraPermissionInfo').style.display = 'none';
+    }
+
+    // Analyze image
+    async function analyzeImage() {
+      if (!modelReady) {
+        showError("Model AI belum siap. Tunggu sebentar...");
+        return;
+      }
+      
+      if (!userImage) {
+        showError("Silakan upload gambar atau ambil foto terlebih dahulu.");
+        return;
+      }
+
+      const weight = parseFloat(document.getElementById('weightInput').value);
+      const height = parseFloat(document.getElementById('heightInput').value);
+      const age = parseInt(document.getElementById('ageInput').value) || 25;
+      
+      if (!weight || weight < 30 || weight > 200) {
+        showError("Masukkan berat badan yang valid (30-200 kg)");
+        return;
+      }
+      
+      if (!height || height < 100 || height > 250) {
+        showError("Masukkan tinggi badan yang valid (100-250 cm)");
+        return;
+      }
+
+      document.getElementById('loadingIndicator').style.display = 'block';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('downloadSection').style.display = 'none';
+      hideError();
+
+      try {
+        document.getElementById('loadingDetail').textContent = "Mendeteksi pose tubuh...";
+        
+        const canvas = document.getElementById('userCanvas');
+        const pose = await net.estimateSinglePose(canvas, {
+          flipHorizontal: false,
+          decodingMethod: 'single-person'
+        });
+
+        document.getElementById('loadingDetail').textContent = "Menganalisis proporsi dan kadar lemak...";
+        
+        if (pose.score < 0.2) {
+          throw new Error("Pose tubuh tidak terdeteksi dengan jelas. Pastikan seluruh tubuh terlihat.");
+        }
+
+        const results = analyzeBody(pose, weight, height, age);
+        
+        // Generate or detect user ID
+        if (!currentUserId) {
+          currentUserId = detectUserFromName() || generateUserId();
+        }
+        
+        // Save session
+        saveUserSession(currentUserId, results);
+        
+        drawKeypoints(pose);
+        displayResults(results);
+        
+        // Render progress chart
+        renderProgressChart(currentUserId);
+        
+        // Show user progress if exists
+        const userSessions = getUserSessionsById(currentUserId);
+        if (userSessions.length > 0) {
+          showUserProgress(currentUserId);
+        }
+        
+        lastAnalysis = results;
+        
+        // Show download section
+        document.getElementById('downloadSection').style.display = 'block';
+        
+      } catch (error) {
+        console.error("Error analisis gambar:", error);
+        showError("Error analisis: " + error.message);
+      } finally {
+        document.getElementById('loadingIndicator').style.display = 'none';
+      }
+    }
+
+    // Analyze body
+    function analyzeBody(pose, weight, height, age) {
+      const keypoints = pose.keypoints;
+      
+      const getKeypoint = (part) => {
+        const point = keypoints.find(p => p.part === part);
+        if (!point || point.score < 0.5) {
+          throw new Error(`Titik ${part} tidak terdeteksi dengan baik`);
+        }
+        return point;
+      };
+
+      try {
+        const leftShoulder = getKeypoint('leftShoulder');
+        const rightShoulder = getKeypoint('rightShoulder');
+        const leftHip = getKeypoint('leftHip');
+        const rightHip = getKeypoint('rightHip');
+
+        const shoulderWidth = Math.sqrt(
+          Math.pow(rightShoulder.position.x - leftShoulder.position.x, 2) +
+          Math.pow(rightShoulder.position.y - leftShoulder.position.y, 2)
+        );
+        
+        const hipWidth = Math.sqrt(
+          Math.pow(rightHip.position.x - leftHip.position.x, 2) +
+          Math.pow(rightHip.position.y - leftHip.position.y, 2)
+        );
+        
+        const estimatedWaistWidth = hipWidth * 0.85;
+        const waistHipRatio = estimatedWaistWidth / hipWidth;
+        const shoulderHipRatio = shoulderWidth / hipWidth;
+        
+        const gender = userGender;
+        const bodyRef = bodyData[gender];
+        
+        const heightInMeters = height / 100;
+        const bmi = weight / (heightInMeters * heightInMeters);
+        
+        const estimatedFat = estimateFatPercentage(waistHipRatio, shoulderHipRatio, bmi, age, gender);
+        const bodyShape = determineBodyShape(shoulderHipRatio, waistHipRatio, gender);
+        const bodyType = determineBodyType(shoulderHipRatio, gender);
+        const idealWeight = calculateIdealWeight(height, gender);
+
+        return {
+          shoulderHipRatio: shoulderHipRatio.toFixed(2),
+          waistHipRatio: waistHipRatio.toFixed(2),
+          estimatedFat: estimatedFat.toFixed(1),
+          bodyShape: bodyShape,
+          bodyType: bodyType,
+          gender: gender,
+          bmi: bmi.toFixed(1),
+          idealWeight: idealWeight.toFixed(1),
+          weight: weight,
+          height: height,
+          age: age,
+          confidence: pose.score.toFixed(2)
+        };
+
+      } catch (error) {
+        console.error("Error dalam analisis tubuh:", error);
+        throw new Error("Tidak dapat menganalisis tubuh: " + error.message);
+      }
+    }
+
+    // Estimate fat percentage
+    function estimateFatPercentage(waistHipRatio, shoulderHipRatio, bmi, age, gender) {
+      let fatPercentage;
+      
+      if (gender === 'male') {
+        fatPercentage = (1.20 * bmi) + (0.23 * age) - 16.2;
+      } else {
+        fatPercentage = (1.20 * bmi) + (0.23 * age) - 5.4;
+      }
+      
+      const idealWHR = gender === 'male' ? 0.90 : 0.75;
+      const whrDeviation = Math.abs(waistHipRatio - idealWHR);
+      
+      if (waistHipRatio > idealWHR) {
+        fatPercentage += whrDeviation * 15;
+      } else {
+        fatPercentage -= whrDeviation * 10;
+      }
+      
+      let minFat, maxFat;
+      if (gender === 'male') {
+        minFat = Math.max(5, 8 + (age - 25) * 0.1);
+        maxFat = Math.min(40, 25 + (age - 25) * 0.3);
+      } else {
+        minFat = Math.max(10, 13 + (age - 25) * 0.1);
+        maxFat = Math.min(45, 32 + (age - 25) * 0.3);
+      }
+      
+      fatPercentage = Math.max(minFat, Math.min(maxFat, fatPercentage));
+      
+      return fatPercentage;
+    }
+
+    // Determine body shape
+    function determineBodyShape(shoulderHipRatio, waistHipRatio, gender) {
+      if (gender === 'male') {
+        if (shoulderHipRatio > 1.4 && waistHipRatio < 0.85) {
+          return { 
+            icon: '🔺', 
+            name: 'Segitiga Terbalik (V-Shape)', 
+            desc: 'Bahu sangat lebar dengan pinggang ramping' 
+          };
+        } else if (shoulderHipRatio > 1.3 && waistHipRatio < 0.90) {
+          return { 
+            icon: '🟦', 
+            name: 'Trapesium', 
+            desc: 'Proporsi bahu dan pinggang seimbang' 
+          };
+        } else {
+          return { 
+            icon: '⬜', 
+            name: 'Persegi', 
+            desc: 'Bahu, pinggang, dan pinggul memiliki lebar yang seimbang' 
+          };
+        }
+      } else {
+        if (waistHipRatio < 0.70) {
+          return { 
+            icon: '⏳', 
+            name: 'Jam Pasir', 
+            desc: 'Pinggang sangat ramping dengan bahu dan pinggul seimbang' 
+          };
+        } else if (shoulderHipRatio < 0.85 && waistHipRatio < 0.80) {
+          return { 
+            icon: '🍐', 
+            name: 'Pir (Segitiga)', 
+            desc: 'Pinggul lebih lebar dari bahu' 
+          };
+        } else {
+          return { 
+            icon: '📦', 
+            name: 'Persegi', 
+            desc: 'Bahu, pinggang, dan pinggul memiliki lebar yang serupa' 
+          };
+        }
+      }
+    }
+
+    // Determine body type
+    function determineBodyType(shoulderHipRatio, gender) {
+      const types = gender === 'male' ? {
+        ectomorph: { ratio: 1.1, desc: "Badan kurus, metabolisme cepat" },
+        mesomorph: { ratio: 1.3, desc: "Badan atletis, mudah membentuk otot" },
+        endomorph: { ratio: 1.0, desc: "Badan lebih besar, mudah menyimpan lemak" }
+      } : {
+        ectomorph: { ratio: 0.9, desc: "Badan kurus, tulang kecil" },
+        mesomorph: { ratio: 1.1, desc: "Badan atletis, proporsi seimbang" },
+        endomorph: { ratio: 1.0, desc: "Badan lebih berisi, lekukan feminin" }
+      };
+      
+      let closestType = 'mesomorph';
+      let smallestDiff = Math.abs(shoulderHipRatio - types.mesomorph.ratio);
+      
+      for (const [type, data] of Object.entries(types)) {
+        const diff = Math.abs(shoulderHipRatio - data.ratio);
+        if (diff < smallestDiff) {
+          smallestDiff = diff;
+          closestType = type;
+        }
+      }
+      
+      return {
+        name: closestType,
+        description: types[closestType].desc
+      };
+    }
+
+    // Calculate ideal weight
+    function calculateIdealWeight(height, gender) {
+      const heightInMeters = height / 100;
+      
+      if (gender === 'male') {
+        return 22 * (heightInMeters * heightInMeters);
+      } else {
+        return 21 * (heightInMeters * heightInMeters);
+      }
+    }
+
+    // Draw keypoints
+    function drawKeypoints(pose) {
+      const canvas = document.getElementById('keypointCanvas');
+      const ctx = canvas.getContext('2d');
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      pose.keypoints.forEach(keypoint => {
+        if (keypoint.score > 0.3) {
+          ctx.beginPath();
+          ctx.arc(keypoint.position.x, keypoint.position.y, 4, 0, 2 * Math.PI);
+          
+          if (keypoint.part === 'leftHip' || keypoint.part === 'rightHip') {
+            ctx.fillStyle = '#e74c3c';
+          } else if (keypoint.part === 'leftShoulder' || keypoint.part === 'rightShoulder') {
+            ctx.fillStyle = '#3498db';
+          } else {
+            ctx.fillStyle = '#2ecc71';
+          }
+          
+          ctx.fill();
+        }
+      });
+    }
+
+    // Display results
+    function displayResults(results) {
+      document.getElementById('whRatio').textContent = results.waistHipRatio;
+      document.getElementById('fatPercentage').textContent = results.estimatedFat + '%';
+      document.getElementById('bmiValue').textContent = results.bmi;
+      document.getElementById('idealWeight').textContent = results.idealWeight + ' kg';
+      
+      // Show IMT calculation
+      document.getElementById('imtExplanation').style.display = 'block';
+      updateIMTCalculation(results.weight, results.height, results.bmi);
+      
+      document.getElementById('ratioProgress').style.width = (results.waistHipRatio * 100) + '%';
+      document.getElementById('fatProgress').style.width = (results.estimatedFat * 2) + '%';
+      document.getElementById('bmiProgress').style.width = (results.bmi * 3) + '%';
+      
+      const weightDiff = Math.abs(results.weight - results.idealWeight);
+      const weightProgress = Math.max(0, 100 - (weightDiff / results.idealWeight * 100));
+      document.getElementById('weightProgress').style.width = weightProgress + '%';
+      
+      document.getElementById('bodyShapeIcon').textContent = results.bodyShape.icon;
+      document.getElementById('bodyShapeText').textContent = results.bodyShape.name;
+      document.getElementById('bodyShapeDesc').textContent = results.bodyShape.desc;
+      
+      // Tampilkan detail proporsi
+      document.getElementById('proportionDetails').innerHTML = `
+        <p><strong>Rasio Bahu-Pinggul:</strong> ${results.shoulderHipRatio}</p>
+        <p><strong>Rasio Pinggang-Pinggul:</strong> ${results.waistHipRatio}</p>
+        <p><strong>Bentuk Tubuh:</strong> ${results.bodyShape.name}</p>
+      `;
+      
+      document.getElementById('matchDescription').textContent = "Analisis proporsi tubuh berdasarkan rasio dan bentuk";
+      document.getElementById('ratioCategory').textContent = getRatioCategory(parseFloat(results.waistHipRatio), results.gender);
+      document.getElementById('fatCategory').textContent = getFatCategory(parseFloat(results.estimatedFat), results.gender);
+      document.getElementById('bmiCategory').textContent = getBMICategory(parseFloat(results.bmi));
+      document.getElementById('weightStatus').textContent = getWeightStatus(results.weight, results.idealWeight);
+      document.getElementById('bodyTypeInfo').textContent = results.bodyType.description;
+      
+      updateGoalBadge(parseFloat(results.bmi));
+      document.getElementById('recommendations').innerHTML = generateRecommendations(results);
+      generateFoodRecommendations(results);
+      generateExerciseRecommendations(results);
+      
+      document.getElementById('downloadSection').style.display = 'block';
+      document.getElementById('resetSection').style.display = 'block';
+      document.getElementById('results').style.display = 'block';
+      
+      // Update IMT result
+      document.getElementById('imtResultValue').textContent = results.bmi;
+      const imtResultElement = document.getElementById('imtResult');
+      imtResultElement.innerHTML = `Hasil IMT Anda: <span id="imtResultValue">${results.bmi}</span> (${getBMICategory(parseFloat(results.bmi))})`;
+    }
+
+    // Update IMT calculation display
+    function updateIMTCalculation(weight, height, bmi) {
+      const heightInMeters = height / 100;
+      const heightSquared = (heightInMeters * heightInMeters).toFixed(2);
+      const calculatedBMI = (weight / heightSquared).toFixed(1);
+      
+      // Update semua elemen perhitungan IMT
+      document.getElementById('calcHeight').textContent = height;
+      document.getElementById('calcHeightMeters').textContent = heightInMeters.toFixed(2);
+      document.getElementById('calcHeightMeters2').textContent = heightInMeters.toFixed(2);
+      document.getElementById('calcHeightMeters2b').textContent = heightInMeters.toFixed(2);
+      document.getElementById('calcWeight').textContent = weight;
+      document.getElementById('calcWeight2').textContent = weight;
+      document.getElementById('calcHeightSquared').textContent = heightSquared;
+      document.getElementById('calcHeightSquared2').textContent = heightSquared;
+      document.getElementById('finalIMT').textContent = calculatedBMI;
+    }
+
+    // Update goal badge
+    function updateGoalBadge(bmi) {
+      const goalBadge = document.getElementById('goalBadge');
+      
+      if (bmi < 18.5) {
+        goalBadge.textContent = 'Underweight';
+        goalBadge.className = 'goal-badge goal-underweight';
+      } else if (bmi < 25) {
+        goalBadge.textContent = 'Normal';
+        goalBadge.className = 'goal-badge goal-normal';
+      } else {
+        goalBadge.textContent = 'Overweight';
+        goalBadge.className = 'goal-badge goal-overweight';
+      }
+    }
+
+    // Helper functions
+    function getRatioCategory(ratio, gender) {
+      if (gender === 'male') {
+        if (ratio < 0.85) return 'Sangat Baik';
+        if (ratio < 0.90) return 'Baik';
+        if (ratio < 0.95) return 'Sedang';
+        return 'Perlu Perhatian';
+      } else {
+        if (ratio < 0.75) return 'Sangat Baik';
+        if (ratio < 0.80) return 'Baik';
+        if (ratio < 0.85) return 'Sedang';
+        return 'Perlu Perhatian';
+      }
+    }
+
+    function getFatCategory(fatPercentage, gender) {
+      const ranges = bodyData[gender].fatRanges;
+      
+      if (fatPercentage <= ranges.excellent) return 'Sangat Baik';
+      if (fatPercentage <= ranges.good) return 'Baik';
+      if (fatPercentage <= ranges.fair) return 'Sedang';
+      return 'Perlu Perhatian';
+    }
+
+    function getBMICategory(bmi) {
+      if (bmi < 18.5) return 'Kurus';
+      if (bmi < 25) return 'Normal';
+      if (bmi < 30) return 'Gemuk';
+      return 'Obesitas';
+    }
+
+    function getWeightStatus(weight, idealWeight) {
+      const diff = weight - idealWeight;
+      const percentage = Math.abs(diff / idealWeight * 100);
+      
+      if (percentage < 5) return 'Ideal';
+      if (diff > 0) return `Kelebihan ${diff.toFixed(1)} kg`;
+      return `Kekurangan ${Math.abs(diff).toFixed(1)} kg`;
+    }
+
+    // Generate recommendations
+    function generateRecommendations(results) {
+      const fatPercentage = parseFloat(results.estimatedFat);
+      const waistHipRatio = parseFloat(results.waistHipRatio);
+      const bmi = parseFloat(results.bmi);
+      const bodyType = results.bodyType.name;
+      const gender = results.gender;
+      
+      let recommendations = [];
+      
+      if (bmi < 18.5) {
+        recommendations.push('🍽️ <strong>Tingkatkan Asupan Kalori:</strong> Fokus pada makanan padat nutrisi');
+        recommendations.push('💪 <strong>Latihan Kekuatan:</strong> Fokus pada latihan beban untuk membangun massa otot');
+      } else if (bmi >= 25) {
+        recommendations.push('⚖️ <strong>Kontrol Berat Badan:</strong> Kurangi asupan kalori dan tingkatkan aktivitas fisik');
+        recommendations.push('🔥 <strong>Kardio Reguler:</strong> Lakukan kardio 4-5x per minggu');
+      } else {
+        recommendations.push('🥗 <strong>Nutrisi Seimbang:</strong> Pertahankan pola makan seimbang');
+        recommendations.push('💪 <strong>Latihan Kombinasi:</strong> Kombinasikan latihan kekuatan dan kardio');
+      }
+      
+      const fatRanges = bodyData[gender].fatRanges;
+      if (fatPercentage > fatRanges.fair) {
+        recommendations.push('🔥 <strong>Turunkan Kadar Lemak:</strong> Fokus pada defisit kalori dan kardio');
+      }
+      
+      if (gender === 'male' && waistHipRatio > 0.95) {
+        recommendations.push('🎯 <strong>Kurangi Lemak Perut:</strong> Latihan core dan hindari makanan tinggi gula');
+      }
+      
+      if (bodyType === 'endomorph') {
+        recommendations.push('⚡ <strong>Metabolisme:</strong> Tingkatkan frekuensi makan dengan porsi kecil');
+      }
+      
+      recommendations.push('💧 <strong>Hidrasi:</strong> Minum 2-3 liter air per hari');
+      
+      return '<ul>' + recommendations.map(rec => `<li>${rec}</li>`).join('') + '</ul>';
+    }
+
+    // Generate food recommendations
+    function generateFoodRecommendations(results) {
+      const bmi = parseFloat(results.bmi);
+      let goal;
+      
+      if (bmi < 18.5) {
+        goal = 'underweight';
+      } else if (bmi < 25) {
+        goal = 'normal';
+      } else {
+        goal = 'overweight';
+      }
+      
+      const foodGrid = document.getElementById('foodRecommendations');
+      foodGrid.innerHTML = '';
+
+      const foods = foodRecommendations[goal];
+
+      foods.forEach(food => {
+        const foodCard = document.createElement('div');
+        foodCard.className = 'food-card';
+        foodCard.innerHTML = `
+          <img src="${food.image}" alt="${food.name}" class="food-image">
+          <div class="food-content">
+            <h3 class="food-title">${food.name}</h3>
+            <p class="food-description">${food.description}</p>
+            
+            <div class="food-meta">
+              <span><strong>💰</strong> Murah & Mudah</span>
+              <span><strong>🏪</strong> Bahan Lokal</span>
+            </div>
+            
+            <div class="nutrition-info">
+              <div class="nutrition-item">
+                <div class="nutrition-value">${food.calories}</div>
+                <div class="nutrition-label">Kalori</div>
+              </div>
+              <div class="nutrition-item">
+                <div class="nutrition-value">${food.protein}</div>
+                <div class="nutrition-label">Protein</div>
+              </div>
+              <div class="nutrition-item">
+                <div class="nutrition-value">${food.carbs}</div>
+                <div class="nutrition-label">Karbo</div>
+              </div>
+            </div>
+
+            <div class="food-benefits">
+              <h4>Keuntungan:</h4>
+              <ul>
+                ${food.benefits.map(benefit => `<li>${benefit}</li>`).join('')}
+              </ul>
+            </div>
+            
+            <div class="food-tips">
+              <strong>💡 Tips:</strong> ${food.tips}
+            </div>
+          </div>
+        `;
+        foodGrid.appendChild(foodCard);
+      });
+    }
+
+    // Generate exercise recommendations
+    function generateExerciseRecommendations(results) {
+      const bmi = parseFloat(results.bmi);
+      let goal;
+      
+      if (bmi < 18.5) {
+        goal = 'underweight';
+      } else if (bmi < 25) {
+        goal = 'normal';
+      } else {
+        goal = 'overweight';
+      }
+      
+      const exerciseGrid = document.getElementById('exerciseRecommendations');
+      exerciseGrid.innerHTML = '';
+
+      const exercises = exerciseRecommendations[goal];
+
+      exercises.forEach(exercise => {
+        const exerciseCard = document.createElement('div');
+        exerciseCard.className = 'exercise-card';
+        exerciseCard.innerHTML = `
+          <div class="video-container">
+            <iframe src="https://www.youtube.com/embed/${exercise.videoId}?rel=0&modestbranding=1" 
+                    frameborder="0" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allowfullscreen
+                    loading="lazy">
+            </iframe>
+          </div>
+          <div class="exercise-content">
+            <h3 class="exercise-title">${exercise.name}</h3>
+            <p class="exercise-description">${exercise.description}</p>
+            
+            <div class="exercise-meta">
+              <span class="meta-item"><span>⏱️</span> ${exercise.duration}</span>
+              <span class="meta-item"><span>🔥</span> ${exercise.intensity}</span>
+              <span class="meta-item"><span>📅</span> ${exercise.frequency}</span>
+            </div>
+
+            <div class="exercise-steps">
+              <h4>Langkah-langkah:</h4>
+              <ul>
+                ${exercise.steps.map(step => `<li>${step}</li>`).join('')}
+              </ul>
+            </div>
+          </div>
+        `;
+        exerciseGrid.appendChild(exerciseCard);
+      });
+    }
+
+    // ================ FUNGSI DOWNLOAD ================
+
+    // Generate PDF
+    async function generatePDF() {
+      if (!lastAnalysis) {
+        showDownloadStatus("Tidak ada hasil analisis untuk diunduh.", "error");
+        return;
+      }
+
+      document.getElementById('downloadLoading').style.display = 'block';
+      document.getElementById('downloadPdfBtn').disabled = true;
+
+      try {
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        
+        doc.setProperties({
+          title: 'BodyMentorAI - Laporan Analisis Tubuh',
+          author: 'BodyMentorAI',
+          creator: 'BodyMentorAI App'
+        });
+
+        let yPosition = 20;
+        const pageWidth = doc.internal.pageSize.width;
+        const margin = 20;
+
+        // Header
+        doc.setFillColor(44, 62, 80);
+        doc.rect(0, 0, pageWidth, 60, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(24);
+        doc.setFont(undefined, 'bold');
+        doc.text('BodyMentorAI', margin, 25);
+        
+        doc.setFontSize(16);
+        doc.text('Laporan Analisis Tubuh', margin, 35);
+        
+        const currentDate = new Date().toLocaleDateString('id-ID');
+        doc.setFontSize(12);
+        doc.text(`Tanggal: ${currentDate}`, margin, 45);
+        
+        yPosition = 70;
+
+        // Data Pribadi
+        doc.setFillColor(52, 152, 219);
+        doc.rect(margin, yPosition - 5, pageWidth - 2*margin, 10, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.text('DATA PRIBADI', margin + 5, yPosition + 2);
+        
+        yPosition += 15;
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(11);
+        
+        const weight = document.getElementById('weightInput').value;
+        const height = document.getElementById('heightInput').value;
+        const age = document.getElementById('ageInput').value;
+        const gender = userGender === 'male' ? 'Pria' : 'Wanita';
+        const userName = document.getElementById('userName').value || 'Tidak diisi';
+        
+        yPosition = addText(doc, `Nama: ${userName}`, margin, yPosition);
+        yPosition = addText(doc, `Berat Badan: ${weight} kg`, margin, yPosition);
+        yPosition = addText(doc, `Tinggi Badan: ${height} cm`, margin, yPosition);
+        yPosition = addText(doc, `Usia: ${age} tahun`, margin, yPosition);
+        yPosition = addText(doc, `Jenis Kelamin: ${gender}`, margin, yPosition);
+        
+        yPosition += 10;
+
+        // Hasil Analisis Utama
+        doc.setFillColor(41, 128, 185);
+        doc.rect(margin, yPosition - 5, pageWidth - 2*margin, 10, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.text('HASIL ANALISIS UTAMA', margin + 5, yPosition + 2);
+        
+        yPosition += 15;
+        doc.setTextColor(0, 0, 0);
+        
+        yPosition = addText(doc, `Indeks Massa Tubuh (BMI): ${lastAnalysis.bmi}`, margin, yPosition, true);
+        yPosition = addText(doc, `Kategori: ${getBMICategory(parseFloat(lastAnalysis.bmi))}`, margin + 10, yPosition);
+        
+        yPosition = addText(doc, `Estimasi Kadar Lemak: ${lastAnalysis.estimatedFat}%`, margin, yPosition, true);
+        yPosition = addText(doc, `Kategori: ${getFatCategory(parseFloat(lastAnalysis.estimatedFat), lastAnalysis.gender)}`, margin + 10, yPosition);
+        
+        yPosition = addText(doc, `Rasio Pinggang-Pinggul: ${lastAnalysis.waistHipRatio}`, margin, yPosition, true);
+        yPosition = addText(doc, `Kategori: ${getRatioCategory(parseFloat(lastAnalysis.waistHipRatio), lastAnalysis.gender)}`, margin + 10, yPosition);
+        
+        yPosition = addText(doc, `Berat Badan Ideal: ${lastAnalysis.idealWeight} kg`, margin, yPosition, true);
+        yPosition = addText(doc, `Status: ${getWeightStatus(lastAnalysis.weight, parseFloat(lastAnalysis.idealWeight))}`, margin + 10, yPosition);
+        
+        yPosition = addText(doc, `Bentuk Tubuh: ${lastAnalysis.bodyShape.name}`, margin, yPosition, true);
+        yPosition = addText(doc, `Deskripsi: ${lastAnalysis.bodyShape.desc}`, margin + 10, yPosition);
+        
+        yPosition += 10;
+
+        // Rekomendasi
+        doc.setFillColor(39, 174, 96);
+        doc.rect(margin, yPosition - 5, pageWidth - 2*margin, 10, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.text('REKOMENDASI', margin + 5, yPosition + 2);
+        
+        yPosition += 15;
+        
+        const bmiValue = parseFloat(lastAnalysis.bmi);
+        let recommendation = '';
+        
+        if (bmiValue < 18.5) {
+          recommendation = 'Fokus pada peningkatan berat badan melalui diet tinggi kalori dan protein, serta latihan kekuatan untuk membangun massa otot.';
+        } else if (bmiValue < 25) {
+          recommendation = 'Pertahankan berat badan ideal dengan pola makan seimbang, aktivitas fisik teratur, dan gaya hidup sehat.';
+        } else {
+          recommendation = 'Kurangi asupan kalori, tingkatkan aktivitas fisik, fokus pada kardio dan diet seimbang untuk mencapai berat badan ideal.';
+        }
+        
+        doc.setTextColor(0, 0, 0);
+        yPosition = addText(doc, recommendation, margin, yPosition);
+        
+        // Footer
+        yPosition = doc.internal.pageSize.height - 30;
+        doc.setFontSize(10);
+        doc.setTextColor(128, 128, 128);
+        doc.text('© 2023 BodyMentorAI - AI Body Analyzer', margin, yPosition);
+
+        // Save the PDF
+        const fileName = `BodyMentorAI-Laporan-${userName.replace(/\s+/g, '-')}-${currentDate.replace(/\//g, '-')}.pdf`;
+        doc.save(fileName);
+        
+        // Show success message
+        showDownloadStatus(`✅ Laporan berhasil diunduh: ${fileName}`, "success");
+        
+      } catch (error) {
+        console.error('Error generating PDF:', error);
+        showDownloadStatus('❌ Gagal membuat PDF: ' + error.message, "error");
+      } finally {
+        document.getElementById('downloadLoading').style.display = 'none';
+        document.getElementById('downloadPdfBtn').disabled = false;
+      }
+    }
+
+    // Download summary
+    function downloadSummary() {
+      if (!lastAnalysis) {
+        showDownloadStatus("Tidak ada hasil analisis untuk diunduh.", "error");
+        return;
+      }
+
+      const summary = `
+=====================================
+BODYMENTORAI - HASIL ANALISIS TUBUH
+=====================================
+
+DATA PRIBADI:
+Nama: ${document.getElementById('userName').value || 'Tidak diisi'}
+Berat Badan: ${document.getElementById('weightInput').value} kg
+Tinggi Badan: ${document.getElementById('heightInput').value} cm
+Usia: ${document.getElementById('ageInput').value} tahun
+Jenis Kelamin: ${userGender === 'male' ? 'Pria' : 'Wanita'}
+
+HASIL ANALISIS:
+- BMI: ${lastAnalysis.bmi} (${getBMICategory(parseFloat(lastAnalysis.bmi))})
+- Kadar Lemak: ${lastAnalysis.estimatedFat}% (${getFatCategory(parseFloat(lastAnalysis.estimatedFat), lastAnalysis.gender)})
+- Rasio Pinggang-Pinggul: ${lastAnalysis.waistHipRatio} (${getRatioCategory(parseFloat(lastAnalysis.waistHipRatio), lastAnalysis.gender)})
+- Berat Ideal: ${lastAnalysis.idealWeight} kg
+- Bentuk Tubuh: ${lastAnalysis.bodyShape.name}
+- Tipe Tubuh: ${lastAnalysis.bodyType.description}
+
+REKOMENDASI:
+${getRecommendationsText()}
+
+=====================================
+© 2023 BodyMentorAI - AI Body Analyzer
+Tanggal: ${new Date().toLocaleDateString('id-ID')}
+=====================================
+      `;
+
+      const blob = new Blob([summary], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `BodyMentorAI-Summary-${new Date().toISOString().split('T')[0]}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      showDownloadStatus("✅ Ringkasan berhasil diunduh!", "success");
+    }
+
+    // Get recommendations text
+    function getRecommendationsText() {
+      const bmi = parseFloat(lastAnalysis.bmi);
+      
+      if (bmi < 18.5) {
+        return `1. Tingkatkan asupan kalori dengan makanan padat nutrisi
+2. Fokus pada latihan kekuatan untuk membangun otot
+3. Konsumsi protein tinggi (1.5-2g per kg berat badan)
+4. Istirahat cukup untuk pemulihan otot`;
+      } else if (bmi < 25) {
+        return `1. Pertahankan pola makan seimbang
+2. Kombinasikan latihan kardio dan kekuatan
+3. Konsumsi makanan utuh dan hindari processed food
+4. Tetap aktif dengan 150 menit olahraga per minggu`;
+      } else {
+        return `1. Kurangi asupan kalori 300-500 kalori per hari
+2. Tingkatkan aktivitas fisik (kardio 4-5x/minggu)
+3. Konsumsi makanan tinggi serat dan protein
+4. Hindari makanan tinggi gula dan lemak jenuh`;
+      }
+    }
+
+    // Download as image
+    function downloadAsImage() {
+      try {
+        const resultsElement = document.getElementById('results');
+        
+        html2canvas(resultsElement).then(canvas => {
+          const image = canvas.toDataURL('image/png');
+          const link = document.createElement('a');
+          link.download = `BodyMentorAI-Hasil-${new Date().toISOString().split('T')[0]}.png`;
+          link.href = image;
+          link.click();
+          
+          showDownloadStatus("✅ Gambar hasil berhasil diunduh!", "success");
+        });
+      } catch (error) {
+        showDownloadStatus("❌ Gagal mengunduh gambar. Coba lagi.", "error");
+      }
+    }
+
+    // Share results
+    function shareResults() {
+      if (navigator.share) {
+        navigator.share({
+          title: 'Hasil Analisis BodyMentorAI',
+          text: `Hasil analisis tubuh saya:\nBMI: ${lastAnalysis.bmi}\nKadar Lemak: ${lastAnalysis.estimatedFat}%\nBentuk Tubuh: ${lastAnalysis.bodyShape.name}`,
+          url: window.location.href
+        })
+        .then(() => showDownloadStatus("✅ Berhasil membagikan hasil!", "success"))
+        .catch(() => showDownloadStatus("❌ Gagal membagikan hasil.", "error"));
+      } else {
+        showDownloadStatus("❌ Browser tidak mendukung fitur share.", "error");
+      }
+    }
+
+    // Helper function for PDF text
+    function addText(doc, text, x, y, bold = false) {
+      if (y > doc.internal.pageSize.height - 20) {
+        doc.addPage();
+        y = 20;
+      }
+      
+      if (bold) {
+        doc.setFont(undefined, 'bold');
+      } else {
+        doc.setFont(undefined, 'normal');
+      }
+      
+      doc.text(text, x, y);
+      return y + 7;
+    }
+
+    // Show download status
+    function showDownloadStatus(message, type) {
+      const statusElement = document.getElementById('downloadStatus');
+      statusElement.textContent = message;
+      statusElement.className = 'download-status';
+      
+      if (type === 'success') {
+        statusElement.classList.add('download-success');
+      } else if (type === 'error') {
+        statusElement.classList.add('download-error');
+      }
+      
+      statusElement.style.display = 'block';
+      
+      // Auto-hide success message after 3 seconds
+      if (type === 'success') {
+        setTimeout(() => {
+          statusElement.style.display = 'none';
+        }, 3000);
+      }
+    }
+
+    // Reset app
+    function resetApp() {
+      if (cameraStream) {
+        closeCamera();
+      }
+
+      userImage = null;
+      lastAnalysis = null;
+      currentUserId = null;
+
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('downloadSection').style.display = 'none';
+      document.getElementById('resetSection').style.display = 'none';
+      document.getElementById('resetBtn').style.display = 'none';
+      document.getElementById('profileSummary').style.display = 'none';
+      document.getElementById('updateProgressForm').style.display = 'none';
+      document.getElementById('imtExplanation').style.display = 'none';
+
+      const userCanvas = document.getElementById('userCanvas');
+      const ctx = userCanvas.getContext('2d');
+      ctx.clearRect(0, 0, userCanvas.width, userCanvas.height);
+      userCanvas.style.display = 'none';
+
+      const keypointCanvas = document.getElementById('keypointCanvas');
+      const keypointCtx = keypointCanvas.getContext('2d');
+      keypointCtx.clearRect(0, 0, keypointCanvas.width, keypointCanvas.height);
+
+      document.getElementById('previewImage').style.display = 'none';
+      document.getElementById('cameraVideo').style.display = 'none';
+      document.getElementById('cameraCanvas').style.display = 'none';
+
+      if (progressChart) {
+        progressChart.destroy();
+        progressChart = null;
+      }
+
+      document.getElementById('placeholderText').style.display = 'flex';
+      switchTab('general');
+      document.getElementById('fileInput').value = '';
+      hideError();
+      hideDownloadStatus();
+
+      // Reset IMT calculation display to default values
+      updateIMTPreview();
+
+      showSuccessMessage("AI telah direset. Silakan upload foto baru atau gunakan kamera untuk analisis.");
+    }
+
+    // Show success message
+    function showSuccessMessage(message) {
+      hideError();
+      
+      const successElement = document.createElement('div');
+      successElement.className = 'success-message';
+      successElement.style.cssText = `
+        background: #d4edda;
+        color: #155724;
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+        border-left: 4px solid #28a745;
+        display: block;
+      `;
+      successElement.textContent = message;
+      
+      const controls = document.querySelector('.controls');
+      controls.parentNode.insertBefore(successElement, controls);
+      
+      setTimeout(() => {
+        successElement.remove();
+      }, 3000);
+    }
+
+    // Check camera availability
+    async function checkCameraAvailability() {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          return;
+        }
+        
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const cameras = devices.filter(device => device.kind === 'videoinput');
+        
+        if (cameras.length === 0) {
+          document.getElementById('cameraBtn').disabled = true;
+          document.getElementById('cameraBtn').innerHTML = '<span>📷</span> Kamera Tidak Tersedia';
+        }
+      } catch (error) {
+        console.warn("Tidak dapat memeriksa kamera:", error);
+      }
+    }
+
+    // Show error
+    function showError(message) {
+      const errorElement = document.getElementById('errorMessage');
+      errorElement.textContent = message;
+      errorElement.style.display = 'block';
+    }
+
+    // Hide error
+    function hideError() {
+      document.getElementById('errorMessage').style.display = 'none';
+    }
+
+    // Hide download status
+    function hideDownloadStatus() {
+      document.getElementById('downloadStatus').style.display = 'none';
+    }
+
+    // Show splash screen
+    function showSplashScreen() {
+      setTimeout(() => {
+        document.getElementById('splashScreen').style.opacity = '0';
+        setTimeout(() => {
+          document.getElementById('splashScreen').style.display = 'none';
+          document.getElementById('mainApp').classList.add('show');
+          initializeApp();
+        }, 500);
+      }, 2000);
+    }
+
+    // Initialize when page loads
+    window.addEventListener('load', showSplashScreen);
+  </script>
+</body>
+</html>
